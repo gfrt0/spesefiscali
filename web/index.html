@@ -86,6 +86,9 @@ const normaLink = (cell) => {
 };
 
 fetch("measures.json").then(r => r.json()).then(data => {
+  data.forEach(d => {
+    if (d.missione) d.missione = d.missione.replace(/^\d+:\s*/, "");
+  });
   const table = new Tabulator("#table", {
     data,
     layout: "fitDataStretch",
@@ -95,27 +98,27 @@ fetch("measures.json").then(r => r.json()).then(data => {
     initialSort: [{column: "effetto_2025", dir: "asc"}],
     columns: [
       {title: "N.",          field: "n", width: 55, headerFilter: false, hozAlign: "right"},
-      {title: "Missione",    field: "missione", width: 200,
+      {title: "Missione",    field: "missione", width: 180,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true}},
       {title: "Norma",       field: "norma", width: 230, headerFilter: "input",
         formatter: normaLink},
-      {title: "Descrizione", field: "descrizione", widthGrow: 3, minWidth: 280,
+      {title: "Descrizione", field: "descrizione", widthGrow: 2, minWidth: 220,
         headerFilter: "input",
         formatter: "textarea",
         cssClass: "descr"},
-      {title: "Tributo",     field: "tributo", width: 110,
+      {title: "Tributo",     field: "tributo", width: 100,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true}},
-      {title: "Vigenza",     field: "termine_vigenza", width: 90, headerFilter: "input"},
-      {title: "Natura",      field: "natura", width: 160,
+      {title: "Vigenza",     field: "termine_vigenza", width: 80, headerFilter: "input"},
+      {title: "Natura",      field: "natura", width: 150,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true}},
-      {title: "2025",        field: "effetto_2025", width: 95, hozAlign: "right",
+      {title: "2025",        field: "effetto_2025", width: 70, hozAlign: "right",
         formatter: colorNeg, sorter: "number"},
-      {title: "2026",        field: "effetto_2026", width: 95, hozAlign: "right",
+      {title: "2026",        field: "effetto_2026", width: 70, hozAlign: "right",
         formatter: colorNeg, sorter: "number"},
-      {title: "2027",        field: "effetto_2027", width: 95, hozAlign: "right",
+      {title: "2027",        field: "effetto_2027", width: 70, hozAlign: "right",
         formatter: colorNeg, sorter: "number"},
       {title: "Beneficiari", field: "beneficiari", width: 200, headerFilter: "input"},
       {title: ">5 anni",     field: "vigore_5plus", width: 80, headerFilter: "input"},
