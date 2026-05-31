@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from normattiva import annotate
+from tributi import normalize as normalize_tributo
 
 ROOT = Path(__file__).resolve().parent.parent
 DB = ROOT / "db" / "spesefiscali.db"
@@ -30,6 +31,7 @@ def main():
     for r in con.execute(f"SELECT {', '.join(COLS)} FROM measures ORDER BY n"):
         d = dict(r)
         d.update(annotate(d["norma"] or ""))
+        d.update(normalize_tributo(d["tributo"] or ""))
         if d["norma_url"]:
             resolved += 1
         rows.append(d)

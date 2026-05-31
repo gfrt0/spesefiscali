@@ -129,7 +129,7 @@
 
 <div class="dash">
   <div class="panel" id="panel-missione"><h3>Per missione (top 8)</h3><div class="rows"></div></div>
-  <div class="panel" id="panel-tributo"><h3>Per tributo (top 8)</h3><div class="rows"></div></div>
+  <div class="panel" id="panel-categoria"><h3>Per categoria fiscale</h3><div class="rows"></div></div>
   <div class="panel" id="panel-natura"><h3>Per natura (top 8)</h3><div class="rows"></div></div>
 </div>
 
@@ -223,34 +223,55 @@ fetch("measures.json").then(r => r.json()).then(data => {
     headerFilterLiveFilterDelay: 200,
     initialSort: [{column: "effetto_2025", dir: "asc"}],
     columns: [
-      {title: "N.",          field: "n", width: 55, headerFilter: false, hozAlign: "right"},
+      {title: "N.",          field: "n", width: 55, headerFilter: false, hozAlign: "right",
+        headerTooltip: "Numero d'ordine nella Tavola 1 dell'RSF 2024"},
       {title: "Missione",    field: "missione", width: 180,
         headerFilter: "list",
-        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true}},
+        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
+        headerTooltip: "Missione di spesa cui la misura è associata nel bilancio dello Stato (etichetta abbreviata; il dato grezzo è la denominazione ufficiale RSF)"},
       {title: "Norma",       field: "norma", width: 230, headerFilter: "input",
-        formatter: normaLink},
+        formatter: normaLink,
+        headerTooltip: "Norma di riferimento (atto istitutivo della spesa fiscale). Il link rimanda al testo consolidato su Normattiva quando risolvibile"},
       {title: "Descrizione", field: "descrizione", widthGrow: 2, minWidth: 220,
         headerFilter: "input",
         formatter: "textarea",
-        cssClass: "descr"},
-      {title: "Tributo",     field: "tributo", width: 100,
+        cssClass: "descr",
+        headerTooltip: "Descrizione sintetica della misura come riportata in RSF 2024"},
+      {title: "Tributo",     field: "tributo_norm", width: 110,
         headerFilter: "list",
-        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true}},
-      {title: "Vigenza",     field: "termine_vigenza", width: 80, headerFilter: "input"},
+        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
+        headerTooltip: "Tributo normalizzato. Combo come IRPEF+IRES indicano misure che operano su più tributi. CREDITO è una forma di erogazione (credito d'imposta)"},
+      {title: "Categoria",   field: "categoria", width: 130,
+        headerFilter: "list",
+        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
+        headerTooltip: "Categoria fiscale: DIRETTA (IRPEF, IRES, IRAP), INDIRETTA (IVA, accisa, registro/bollo, successioni), SOSTITUTIVA, CREDITO_IMPOSTA, MISTA, ALTRO"},
+      {title: "Tributo (raw)", field: "tributo", width: 180, headerFilter: "input", visible: false,
+        headerTooltip: "Etichetta originale del tributo come riportata in RSF 2024 (prima della normalizzazione)"},
+      {title: "Vigenza",     field: "termine_vigenza", width: 80, headerFilter: "input",
+        headerTooltip: "Termine di vigenza della misura: ultimo anno d'imposta in cui si applica, oppure 'A REGIME' se permanente"},
       {title: "Natura",      field: "natura", width: 150,
         headerFilter: "list",
-        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true}},
+        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
+        headerTooltip: "Tipologia tecnica della misura: esenzione, deduzione, detrazione, credito d'imposta, riduzione d'aliquota, regime speciale, ..."},
       {title: "2025",        field: "effetto_2025", width: 70, hozAlign: "right",
-        formatter: colorNeg, sorter: "number"},
+        formatter: colorNeg, sorter: "number",
+        headerTooltip: "Effetto finanziario stimato per il 2025 in milioni di euro (negativo = minor gettito per l'erario)"},
       {title: "2026",        field: "effetto_2026", width: 70, hozAlign: "right",
-        formatter: colorNeg, sorter: "number"},
+        formatter: colorNeg, sorter: "number",
+        headerTooltip: "Effetto finanziario stimato per il 2026 in milioni di euro"},
       {title: "2027",        field: "effetto_2027", width: 70, hozAlign: "right",
-        formatter: colorNeg, sorter: "number"},
-      {title: "Beneficiari", field: "beneficiari", width: 200, headerFilter: "input"},
-      {title: "Frequenze",   field: "numero_frequenze", width: 100, headerFilter: "input", visible: false},
-      {title: "Pro capite",  field: "effetto_procapite", width: 110, headerFilter: "input", visible: false},
-      {title: ">5 anni",     field: "vigore_5plus", width: 80, headerFilter: "input", visible: false},
+        formatter: colorNeg, sorter: "number",
+        headerTooltip: "Effetto finanziario stimato per il 2027 in milioni di euro"},
+      {title: "Beneficiari", field: "beneficiari", width: 200, headerFilter: "input",
+        headerTooltip: "Soggetti e categorie dei beneficiari (persone fisiche, imprese, particolari categorie, ...)"},
+      {title: "Frequenze",   field: "numero_frequenze", width: 100, headerFilter: "input", visible: false,
+        headerTooltip: "Numero di beneficiari osservato (frequenza), quando disponibile"},
+      {title: "Pro capite",  field: "effetto_procapite", width: 110, headerFilter: "input", visible: false,
+        headerTooltip: "Effetto finanziario medio pro capite in euro, quando disponibile"},
+      {title: ">5 anni",     field: "vigore_5plus", width: 80, headerFilter: "input", visible: false,
+        headerTooltip: "Indica se la misura è in vigore da più di cinque anni (proxy di stratificazione storica)"},
       {title: "p.",          field: "page", width: 50, hozAlign: "right",
+        headerTooltip: "Pagina del PDF RSF 2024 in cui la misura compare (link diretto)",
         formatter: (cell) => {
           const v = cell.getValue();
           if (!v) return "";
@@ -296,9 +317,9 @@ fetch("measures.json").then(r => r.json()).then(data => {
 
   const refreshDashboard = () => {
     const data = table.getRows("active").map(r => r.getData());
-    renderPanel("panel-missione", "missione", aggregate(data, "missione"));
-    renderPanel("panel-tributo",  "tributo",  aggregate(data, "tributo"));
-    renderPanel("panel-natura",   "natura",   aggregate(data, "natura"));
+    renderPanel("panel-missione",  "missione",  aggregate(data, "missione"));
+    renderPanel("panel-categoria", "categoria", aggregate(data, "categoria", 10));
+    renderPanel("panel-natura",    "natura",    aggregate(data, "natura"));
   };
 
   // Click a dashboard label -> set the corresponding header filter
