@@ -28,15 +28,18 @@ MESI = {
 # Order matters: longer / more specific patterns first.
 TIPO_ATTO_MAP = [
     (r"d\.?\s*lgs\.?", "decreto.legislativo"),
+    (r"d\.?\s*l(?:gv?|v)o\.?", "decreto.legislativo"),       # D.Lvo / D.Lgvo (RSF typos)
+    (r"d\.?\s*l\.?\s*g\.?\s*v?\.?s\.?", "decreto.legislativo"),
     (r"decreto\s+legislativo", "decreto.legislativo"),
-    (r"d\.?\s*l\.?(?!\s*g)", "decreto.legge"),
+    (r"d\.?\s*l[.:]?(?!\s*g)", "decreto.legge"),
     (r"decreto[-\s]+legge", "decreto.legge"),
     (r"d\.?\s*p\.?\s*r\.?", "decreto.del.presidente.della.repubblica"),
     (r"d\.?\s*m\.?", "decreto.ministeriale"),
+    (r"regio\s+decreto", "regio.decreto"),
     (r"r\.?\s*d\.?", "regio.decreto"),
     (r"l\.?\s*c\.?", "legge.costituzionale"),
     (r"legge", "legge"),
-    (r"l\.", "legge"),
+    (r"l\.?", "legge"),     # accept bare 'l' too
 ]
 
 # Testi Unici (TU references resolve to a specific norma).
@@ -49,35 +52,85 @@ TU = {
     "TUIVA": ("decreto.del.presidente.della.repubblica", "1972-10-26", "633"),
 }
 
-# Article+comma anchor (handles -bis, -ter, ...).
+# Article+comma anchor (handles -bis, -ter, "Artt.", "co." for "comma").
 ART_RE = re.compile(
-    r"\bart(?:\.|icolo)?\s*(?P<art>\d+(?:[\-\s]?(?:bis|ter|quater|quinquies|sexies|septies|octies|novies|decies))?)"
-    r"(?:[,\s]+comma\s+(?P<com>[\dA-Za-z\-\.]+))?",
+    r"\bart(?:\.|icolo|t\.|t)?\s*(?P<art>\d+(?:[\-\s]?(?:bis|ter|quater|quinquies|sexies|septies|octies|novies|decies))?)"
+    r"(?:[,\s]+(?:comma|co\.)\s+(?P<com>[\dA-Za-z\-\.]+))?",
     re.IGNORECASE,
 )
 
-_TIPO = (r"d\.?\s*lgs\.?|decreto\s+legislativo|d\.?\s*l\.?(?!\s*g)|"
-         r"decreto[-\s]+legge|d\.?\s*p\.?\s*r\.?|d\.?\s*m\.?|r\.?\s*d\.?|"
-         r"legge|l\.\s*c\.|l\.")
+# Tipo alternation, widened to tolerate the various spacing / abbreviation
+# / typo conventions seen across nine RSF editions:
+#   D.Lgs. / D.lgs. / D.lgs / D.Lvo / D.Lgvo / Decreto legislativo
+#   D.L. / D L / DL / decreto-legge
+#   D.P.R. / DPR / DPR.
+#   Legge / L. / L  (single capital L when followed by n.NUM)
+_TIPO = (
+    r"d\.?\s*l(?:gv?|v)o\.?"                          # D.Lvo / D.Lgvo (typo for Lgs)
+    r"|d\.?\s*l\s*[.:]?\s*g\s*[.:]?\s*v?\.?s?\.?"      # D.Lgs / D.Lgvs / D.lgs .
+    r"|decreto\s+legislativo"
+    r"|decreto[-\s]+legge"
+    r"|d\.?\s*l[.:]?(?!\s*g|\s*p|\s*m|\s*lgs|\s*lvo|\s*lgvo)"   # D.L. / D.L: (excl. variants)
+    r"|d\.?\s*p\.?\s*r\.?"
+    r"|d\.?\s*m\.?"
+    r"|regio\s+decreto"
+    r"|r\.?\s*d\.?"
+    r"|legge"
+    r"|l\.\s*c\."
+    r"|l\.?"
+)
 
-# Full-form citation: TIPO + DD MONTH YYYY + n. NUM
+_MESE = (r"gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|"
+         r"settembre|ottobre|novembre|dicembre")
+
+# Full-form citation:  TIPO + DD MONTH YYYY + n. NUM
 CITE_RE = re.compile(
     rf"(?P<tipo>{_TIPO})\s*"
     r"(?P<giorno>\d{1,2})°?\s+"
-    r"(?P<mese>gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+"
-    r"(?P<anno>\d{4})\s*,?\s*n\.\s*(?P<num>\d+)",
+    rf"(?P<mese>{_MESE})\s+"
+    r"(?P<anno>\d{2,4})\s*[,.]?\s*n\s*[.,]?\s*(?P<num>\d+)",
     re.IGNORECASE,
 )
 
-# Abbreviated forms used heavily in RSF 2016-2021:
-#   "D.P.R. 633/72"  "Legge 604/1954"  "L. 178/2020"
-CITE_SHORT = re.compile(
-    rf"\b(?P<tipo>{_TIPO})\s*(?:n\.\s*)?(?P<num>\d{{1,5}})\s*/\s*(?P<yy>\d{{2,4}})\b",
+# Reversed order:  TIPO [n.] NUM + del + DD MONTH YYYY
+#   "legge n. 232 del 11 dicembre 2016"
+#   "D.L. n. 41 del 23 febbraio 1995"
+#   "DL 351 del 25 settembre 2001"
+CITE_NUM_FIRST = re.compile(
+    rf"(?P<tipo>{_TIPO})\s*(?:n\s*[.,]\s*)?(?P<num>\d+)\s+del\s+"
+    r"(?P<giorno>\d{1,2})°?\s+"
+    rf"(?P<mese>{_MESE})\s+"
+    r"(?P<anno>\d{4})",
     re.IGNORECASE,
 )
-#   "D.L. n. 34 del 2019"  "legge n. 116 del 1995"  "D.lgs. N. 347 del 1990"
+
+# Numeric (slashed or dotted) date:  TIPO + [n.] NUM + del + DD/MM/YYYY
+#   "D. Lgs 347 del 31/10/1990"   "Legge 27.12.2006, n. 296"
+CITE_NUM_FIRST_NUMDATE = re.compile(
+    rf"(?P<tipo>{_TIPO})\s*(?:n\s*[.,]\s*)?(?P<num>\d+)\s+del\s+"
+    r"(?P<giorno>\d{1,2})[/.\-](?P<mese>\d{1,2})[/.\-](?P<anno>\d{4})",
+    re.IGNORECASE,
+)
+# "Legge 27.12.2006, n. 296" — date before number
+CITE_DATE_FIRST_NUMDATE = re.compile(
+    rf"(?P<tipo>{_TIPO})\s*"
+    r"(?P<giorno>\d{1,2})[/.\-](?P<mese>\d{1,2})[/.\-](?P<anno>\d{4})\s*[,.]?\s*"
+    r"n\s*[.,]\s*(?P<num>\d+)",
+    re.IGNORECASE,
+)
+
+# Abbreviated year-only forms:
+#   "D.P.R. 633/72"  "Legge 604/1954"  "L. 178/2020"  "DL 70-2011"
+#   "legge, 413/1991"  (stray comma between tipo and number)
+CITE_SHORT = re.compile(
+    rf"\b(?P<tipo>{_TIPO})\s*,?\s*(?:n[-\s.,]\s*)?(?P<num>\d{{1,5}})\s*[/\-]\s*(?P<yy>\d{{2,4}})\b",
+    re.IGNORECASE,
+)
+#   "D.L. n. 34 del 2019"  "legge n. 116 del 1995"
+#   "D.lgs . N. 347 del 1990"    (stray space-dot before n.)
+#   "D.L. n. 330 del 94"         (two-digit year)
 CITE_DEL = re.compile(
-    rf"\b(?P<tipo>{_TIPO})\s*(?:n\.\s*)?(?P<num>\d{{1,5}})\s+del\s+(?P<yy>\d{{4}})\b",
+    rf"\b(?P<tipo>{_TIPO})\s*[.,]?\s*(?:n\s*[.,]\s*)?(?P<num>\d{{1,5}})\s+del\s+(?P<yy>\d{{2,4}})\b",
     re.IGNORECASE,
 )
 
@@ -150,10 +203,17 @@ def parse_norma(s: str) -> Parsed:
     articolo = art_m.group("art") if art_m else None
     comma = art_m.group("com") if art_m else None
 
-    cite_m = CITE_RE.search(s)
-    if cite_m:
+    # Try every full-date pattern in order
+    for rx in (CITE_RE, CITE_NUM_FIRST, CITE_DATE_FIRST_NUMDATE, CITE_NUM_FIRST_NUMDATE):
+        cite_m = rx.search(s)
+        if not cite_m:
+            continue
         tipo = _norm_tipo(cite_m.group("tipo"))
-        mese = MESI[cite_m.group("mese").lower()]
+        mese_raw = cite_m.group("mese")
+        if mese_raw.isdigit():
+            mese = mese_raw.zfill(2)
+        else:
+            mese = MESI[mese_raw.lower()]
         giorno = cite_m.group("giorno").zfill(2)
         data = f"{cite_m.group('anno')}-{mese}-{giorno}"
         if not (art_m and art_m.start() < cite_m.end()):
