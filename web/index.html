@@ -71,8 +71,7 @@
     position: absolute; right: 5px; top: 0; bottom: 0;
     display: flex; align-items: center;
     font-variant-numeric: tabular-nums;
-    color: #fff; font-size: 11px;
-    text-shadow: 0 0 2px rgba(0,0,0,.4);
+    color: #1a1a1a; font-size: 11px;
     white-space: nowrap;
     pointer-events: none;
   }
@@ -172,9 +171,49 @@ const normaLink = (cell) => {
   return `<a href="${url}" target="_blank"${cls}>${v}</a>`;
 };
 
+// Short labels for missioni whose official names are awkwardly long.
+// Anything not in this map gets sentence-case (first letter upper, rest lower).
+const MISSIONE_SHORT = {
+  "AGRICOLTURA POLITICHE AGROALIMENTARI E PESCA": "Agricoltura e pesca",
+  "COMPETITIVITA' E SVILUPPO DELLE IMPRESE": "Imprese",
+  "COMPETITIVITA’ E SVILUPPO DELLE IMPRESE": "Imprese",
+  "DIRITTO ALLA MOBILITA' E SVILUPPO DEI SISTEMI DI TRASPORTO": "Mobilità e trasporti",
+  "DIRITTO ALLA MOBILITA’ E SVILUPPO DEI SISTEMI DI TRASPORTO": "Mobilità e trasporti",
+  "INFRASTRUTTURE PUBBLICHE E LOGISTICA": "Infrastrutture",
+  "COMMERCIO INTERNAZIONALE ED INTERNAZIONALIZZAZIONE DEL SISTEMA PRODUTTIVO": "Commercio estero",
+  "RICERCA E INNOVAZIONE": "Ricerca",
+  "SVILUPPO SOSTENIBILE E TUTELA DEL TERRITORIO E DELL'AMBIENTE": "Ambiente e territorio",
+  "SVILUPPO SOSTENIBILE E TUTELA DEL TERRITORIO E DELL’AMBIENTE": "Ambiente e territorio",
+  "CASA E ASSETTO URBANISTICO": "Casa",
+  "TUTELA DELLA SALUTE": "Salute",
+  "TUTELA E VALORIZZAZIONE DEI BENI E ATTIVITA' CULTURALI E PAESAGGISTICI": "Beni culturali",
+  "TUTELA E VALORIZZAZIONE DEI BENI E ATTIVITA’ CULTURALI E PAESAGGISTICI": "Beni culturali",
+  "ISTRUZIONE SCOLASTICA": "Scuola",
+  "ISTRUZIONE UNIVERSITARIA E FORMAZIONE POST-UNIVERSITARIA": "Università",
+  "DIRITTI SOCIALI, POLITICHE SOCIALI E FAMIGLIA": "Politiche sociali",
+  "POLITICHE PREVIDENZIALI": "Previdenza",
+  "POLITICHE PER IL LAVORO": "Lavoro",
+  "IMMIGRAZIONE, ACCOGLIENZA E GARANZIA DEI DIRITTI": "Immigrazione",
+  "SVILUPPO E RIEQUILIBRIO TERRITORIALE": "Coesione territoriale",
+  "POLITICHE ECONOMICO-FINANZIARIE E DI BILANCIO E TUTELA DELLA FINANZA PUBBLICA": "Finanza pubblica",
+  "POLITICHE ECONOMICO-FINANZIARIE E DI BILANCIO": "Finanza pubblica",
+  "GIOVANI E SPORT": "Giovani e sport",
+  "TURISMO": "Turismo",
+  "COMUNICAZIONI": "Comunicazioni",
+  "REGOLAZIONE DEI MERCATI": "Mercati",
+  "SERVIZI GENERALI DELLE AMMINISTRAZIONI PUBBLICHE": "Servizi generali",
+  "FONDI DA RIPARTIRE": "Fondi da ripartire",
+};
+const sentenceCase = (s) => s ? (s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()) : s;
+const shortMissione = (s) => {
+  if (!s) return s;
+  const stripped = s.replace(/^\d+:\s*/, "");
+  return MISSIONE_SHORT[stripped] || sentenceCase(stripped);
+};
+
 fetch("measures.json").then(r => r.json()).then(data => {
   data.forEach(d => {
-    if (d.missione) d.missione = d.missione.replace(/^\d+:\s*/, "");
+    if (d.missione) d.missione = shortMissione(d.missione);
   });
   const table = new Tabulator("#table", {
     data,
@@ -285,22 +324,29 @@ fetch("measures.json").then(r => r.json()).then(data => {
   table.on("dataFiltered", updateStats);
   table.on("tableBuilt", updateStats);
 
-  // Column show/hide menu
+  // Column show/hide menu — populated once Tabulator has built the columns.
   const colsMenu = document.getElementById("cols-menu");
   const colsBtn = document.getElementById("cols-btn");
-  colsMenu.innerHTML = table.getColumns().map(col => {
-    const f = col.getField();
-    if (!f || f === "n") return "";
-    const title = col.getDefinition().title;
-    const checked = col.isVisible() ? "checked" : "";
-    return `<label><input type="checkbox" data-field="${f}" ${checked}>${title}</label>`;
-  }).join("");
+  const buildColsMenu = () => {
+    const items = table.getColumns().map(col => {
+      const f = col.getField();
+      if (!f || f === "n") return "";
+      const title = col.getDefinition().title;
+      const checked = col.isVisible() ? "checked" : "";
+      return `<label><input type="checkbox" data-field="${f}" ${checked}>${title}</label>`;
+    }).join("");
+    colsMenu.innerHTML = items;
+  };
+  table.on("tableBuilt", buildColsMenu);
+
   colsBtn.addEventListener("click", (e) => {
     e.stopPropagation();
+    if (!colsMenu.innerHTML.trim()) buildColsMenu();
     colsMenu.classList.toggle("open");
   });
   document.addEventListener("click", (e) => {
-    if (!colsMenu.contains(e.target)) colsMenu.classList.remove("open");
+    if (e.target === colsBtn || colsMenu.contains(e.target)) return;
+    colsMenu.classList.remove("open");
   });
   colsMenu.addEventListener("change", (e) => {
     const f = e.target.dataset.field;
