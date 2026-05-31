@@ -545,18 +545,18 @@ function initTable(data) {
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Tipologia tecnica della misura: esenzione, deduzione, detrazione, credito d'imposta, riduzione d'aliquota, regime speciale, ..."},
-      {title: "2025",        field: "effetto_y0", width: 80, hozAlign: "right",
+      {title: "T+1",         field: "effetto_y0", width: 80, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
-        headerTooltip: "Effetto finanziario stimato per il 2025 in milioni di euro (negativo = minor gettito per l'erario)"},
-      {title: "2026",        field: "effetto_y1", width: 80, hozAlign: "right",
+        headerTooltip: () => `Effetto finanziario stimato per l'anno ${currentYear + 1} in mln EUR (negativo = minor gettito)`},
+      {title: "T+2",         field: "effetto_y1", width: 80, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
-        headerTooltip: "Effetto finanziario stimato per il 2026 in milioni di euro"},
-      {title: "2027",        field: "effetto_y2", width: 80, hozAlign: "right",
+        headerTooltip: () => `Effetto finanziario stimato per l'anno ${currentYear + 2} in mln EUR`},
+      {title: "T+3",         field: "effetto_y2", width: 80, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
-        headerTooltip: "Effetto finanziario stimato per il 2027 in milioni di euro"},
+        headerTooltip: () => `Effetto finanziario stimato per l'anno ${currentYear + 3} in mln EUR`},
       {title: "Beneficiari", field: "beneficiari", width: 200, headerFilter: "input",
         headerTooltip: "Soggetti e categorie dei beneficiari (persone fisiche, imprese, particolari categorie, ...)"},
       {title: "Frequenze",   field: "numero_frequenze", width: 95, hozAlign: "right",
@@ -777,22 +777,9 @@ function initTable(data) {
   const search = document.getElementById("search");
   search.addEventListener("input", applyFilters);
 
-  // Apply the calendar-year titles to the effetto columns. Tabulator's
-  // tableBuilt may have already fired by the time we attach, so run once
-  // immediately (safe: getColumn returns null if not yet ready).
-  const setColTitle = (field, title) => {
-    const col = table.getColumn(field);
-    if (col) col.updateDefinition({title});
-  };
-  const applyYearTitles = () => {
-    setColTitle("effetto_y0", String(currentYear + 1));
-    setColTitle("effetto_y1", String(currentYear + 2));
-    setColTitle("effetto_y2", String(currentYear + 3));
-  };
-  table.on("tableBuilt", applyYearTitles);
-  setTimeout(applyYearTitles, 0);
-
-  // Year selector: refetch + re-render in place.
+  // Year selector: refetch + re-render in place. The T+1/T+2/T+3 column
+  // headers stay constant; their tooltips are functions of currentYear
+  // so they refresh automatically on hover.
   const sel = document.getElementById("year-selector");
   sel.addEventListener("change", async (e) => {
     const y = +e.target.value;
@@ -803,7 +790,6 @@ function initTable(data) {
       currentYear = y;
       updateChrome(y, d.length);
       Object.keys(activeFilters).forEach(k => delete activeFilters[k]);
-      applyYearTitles();
       await table.replaceData(d);
       refreshAll();
       history.replaceState(null, "", `#year=${y}`);
