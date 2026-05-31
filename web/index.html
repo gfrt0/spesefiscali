@@ -77,6 +77,31 @@
     border: 1px solid var(--border); border-radius: 4px;
   }
   .stats { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .cols-btn {
+    position: relative;
+    padding: 7px 12px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: #fff; cursor: pointer;
+  }
+  .cols-menu {
+    display: none;
+    position: absolute; top: 100%; right: 0;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.08);
+    padding: 6px 0;
+    min-width: 200px;
+    z-index: 10;
+    margin-top: 4px;
+  }
+  .cols-menu.open { display: block; }
+  .cols-menu label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 12px;
+    font-size: 13px; cursor: pointer;
+  }
+  .cols-menu label:hover { background: #f3f3f3; }
+  .cols-menu input { margin: 0; }
   .neg { color: var(--neg); font-variant-numeric: tabular-nums; text-align: right; }
   .num { font-variant-numeric: tabular-nums; text-align: right; }
   .descr { white-space: normal; }
@@ -107,6 +132,10 @@
 <div class="controls">
   <input id="search" type="search" placeholder="Cerca in descrizione, norma, beneficiari, missione…" autofocus>
   <span class="stats" id="stats"></span>
+  <div style="position:relative">
+    <button class="cols-btn" id="cols-btn">Colonne ▾</button>
+    <div class="cols-menu" id="cols-menu"></div>
+  </div>
 </div>
 
 <div id="table"></div>
@@ -174,7 +203,9 @@ fetch("measures.json").then(r => r.json()).then(data => {
       {title: "2027",        field: "effetto_2027", width: 70, hozAlign: "right",
         formatter: colorNeg, sorter: "number"},
       {title: "Beneficiari", field: "beneficiari", width: 200, headerFilter: "input"},
-      {title: ">5 anni",     field: "vigore_5plus", width: 80, headerFilter: "input"},
+      {title: "Frequenze",   field: "numero_frequenze", width: 100, headerFilter: "input", visible: false},
+      {title: "Pro capite",  field: "effetto_procapite", width: 110, headerFilter: "input", visible: false},
+      {title: ">5 anni",     field: "vigore_5plus", width: 80, headerFilter: "input", visible: false},
       {title: "p.",          field: "page", width: 50, hozAlign: "right",
         formatter: (cell) => {
           const v = cell.getValue();
@@ -246,6 +277,30 @@ fetch("measures.json").then(r => r.json()).then(data => {
   };
   table.on("dataFiltered", updateStats);
   table.on("tableBuilt", updateStats);
+
+  // Column show/hide menu
+  const colsMenu = document.getElementById("cols-menu");
+  const colsBtn = document.getElementById("cols-btn");
+  colsMenu.innerHTML = table.getColumns().map(col => {
+    const f = col.getField();
+    if (!f || f === "n") return "";
+    const title = col.getDefinition().title;
+    const checked = col.isVisible() ? "checked" : "";
+    return `<label><input type="checkbox" data-field="${f}" ${checked}>${title}</label>`;
+  }).join("");
+  colsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    colsMenu.classList.toggle("open");
+  });
+  document.addEventListener("click", (e) => {
+    if (!colsMenu.contains(e.target)) colsMenu.classList.remove("open");
+  });
+  colsMenu.addEventListener("change", (e) => {
+    const f = e.target.dataset.field;
+    if (!f) return;
+    if (e.target.checked) table.showColumn(f);
+    else table.hideColumn(f);
+  });
 
   const search = document.getElementById("search");
   search.addEventListener("input", () => {
