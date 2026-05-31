@@ -473,15 +473,27 @@ async function bootstrap() {
   initTable(data);
   sel.addEventListener("change", async (e) => {
     const y = +e.target.value;
-    const d = prepData(await (await fetch(`measures_${y}.json`)).json());
-    currentYear = y;
-    updateChrome(y, d.length);
-    Object.keys(activeFilters).forEach(k => delete activeFilters[k]);
-    table.updateColumnDefinition("effetto_y0", {title: String(y + 1)});
-    table.updateColumnDefinition("effetto_y1", {title: String(y + 2)});
-    table.updateColumnDefinition("effetto_y2", {title: String(y + 3)});
-    table.replaceData(d).then(() => refreshAll());
-    history.replaceState(null, "", `#year=${y}`);
+    try {
+      const resp = await fetch(`measures_${y}.json`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const d = prepData(await resp.json());
+      currentYear = y;
+      updateChrome(y, d.length);
+      Object.keys(activeFilters).forEach(k => delete activeFilters[k]);
+      const setColTitle = (field, title) => {
+        const col = table.getColumn(field);
+        if (col) col.updateDefinition({title});
+      };
+      setColTitle("effetto_y0", String(y + 1));
+      setColTitle("effetto_y1", String(y + 2));
+      setColTitle("effetto_y2", String(y + 3));
+      await table.replaceData(d);
+      refreshAll();
+      history.replaceState(null, "", `#year=${y}`);
+    } catch (err) {
+      console.error("[year selector] failed:", err);
+      alert("Errore nel cambio anno: " + err.message);
+    }
   });
 }
 
@@ -787,14 +799,21 @@ function initTable(data) {
   const search = document.getElementById("search");
   search.addEventListener("input", applyFilters);
 
-  // Apply the calendar-year titles to the effetto columns once the table
-  // has been built. (initTable is called with the initial year's data;
-  // subsequent year changes re-set these via updateColumnDefinition.)
-  table.on("tableBuilt", () => {
-    table.updateColumnDefinition("effetto_y0", {title: String(currentYear + 1)});
-    table.updateColumnDefinition("effetto_y1", {title: String(currentYear + 2)});
-    table.updateColumnDefinition("effetto_y2", {title: String(currentYear + 3)});
-  });
+  // Apply the calendar-year titles to the effetto columns. Tabulator's
+  // tableBuilt may have already fired by the time we attach, so run once
+  // immediately (safe: getColumn returns null if not yet ready).
+  const setColTitle = (field, title) => {
+    const col = table.getColumn(field);
+    if (col) col.updateDefinition({title});
+  };
+  const applyYearTitles = () => {
+    setColTitle("effetto_y0", String(currentYear + 1));
+    setColTitle("effetto_y1", String(currentYear + 2));
+    setColTitle("effetto_y2", String(currentYear + 3));
+  };
+  table.on("tableBuilt", applyYearTitles);
+  // Also try once after a tick, in case tableBuilt already fired.
+  setTimeout(applyYearTitles, 0);
 }
 
 bootstrap();
