@@ -5,6 +5,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+from normattiva import annotate
+
 ROOT = Path(__file__).resolve().parent.parent
 DB = ROOT / "db" / "spesefiscali.db"
 OUT = ROOT / "web" / "measures.json"
@@ -23,9 +25,17 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
-    rows = [dict(r) for r in con.execute(f"SELECT {', '.join(COLS)} FROM measures ORDER BY n")]
+    rows = []
+    resolved = 0
+    for r in con.execute(f"SELECT {', '.join(COLS)} FROM measures ORDER BY n"):
+        d = dict(r)
+        d.update(annotate(d["norma"] or ""))
+        if d["norma_url"]:
+            resolved += 1
+        rows.append(d)
     OUT.write_text(json.dumps(rows, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"wrote {len(rows)} rows -> {OUT} ({OUT.stat().st_size/1024:.0f} KB)")
+    print(f"Normattiva URLs resolved: {resolved}/{len(rows)} ({100*resolved/len(rows):.1f}%)")
 
 
 if __name__ == "__main__":

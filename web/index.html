@@ -27,6 +27,50 @@
     display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
     margin-bottom: 10px;
   }
+  .dash {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .panel {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    background: #fafafa;
+    min-height: 180px;
+  }
+  .panel h3 {
+    font-size: 12px; font-weight: 600; margin: 0 0 6px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+  }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 1fr 70px;
+    gap: 6px;
+    align-items: center;
+    margin: 2px 0;
+    font-size: 12px;
+  }
+  .bar-row .lbl {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    cursor: pointer;
+  }
+  .bar-row .lbl:hover { color: #0a58ca; text-decoration: underline; }
+  .bar-row .bar-cell {
+    position: relative; height: 14px; background: #f0e6e6; border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar-row .bar-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: var(--neg);
+    opacity: .75;
+  }
+  .bar-row .val {
+    font-variant-numeric: tabular-nums; text-align: right;
+    color: var(--fg); font-size: 11px;
+  }
+  .bar-row.active .lbl { font-weight: 600; }
   #search {
     flex: 1; min-width: 240px;
     padding: 8px 10px; font-size: 14px;
@@ -54,6 +98,12 @@
   Cerca, filtra e ordina. Effetti finanziari in milioni di euro (negativo = minor gettito).
 </div>
 
+<div class="dash">
+  <div class="panel" id="panel-missione"><h3>Per missione (top 8)</h3><div class="rows"></div></div>
+  <div class="panel" id="panel-tributo"><h3>Per tributo (top 8)</h3><div class="rows"></div></div>
+  <div class="panel" id="panel-natura"><h3>Per natura (top 8)</h3><div class="rows"></div></div>
+</div>
+
 <div class="controls">
   <input id="search" type="search" placeholder="Cerca in descrizione, norma, beneficiari, missione…" autofocus>
   <span class="stats" id="stats"></span>
@@ -76,13 +126,16 @@ const colorNeg = (cell) => {
   return fmtEUR(cell);
 };
 
-// Normattiva search URL builder: just send the text of "norma" to a Google site-search,
-// which is far more robust than parsing Italian legal cites by hand.
+// Normattiva linker: use pre-parsed norma_url if available, else fall back
+// to a Google site-search of normattiva.it. About 99.7% of measures resolve.
 const normaLink = (cell) => {
   const v = cell.getValue();
   if (!v) return "";
-  const q = encodeURIComponent("site:normattiva.it " + v);
-  return `<a href="https://www.google.com/search?q=${q}" target="_blank">${v}</a>`;
+  const d = cell.getRow().getData();
+  const url = d.norma_url
+    || ("https://www.google.com/search?q=" + encodeURIComponent("site:normattiva.it " + v));
+  const cls = d.norma_url ? "" : ' style="color:#888"';
+  return `<a href="${url}" target="_blank"${cls}>${v}</a>`;
 };
 
 fetch("measures.json").then(r => r.json()).then(data => {
@@ -132,6 +185,55 @@ fetch("measures.json").then(r => r.json()).then(data => {
   });
 
   const stats = document.getElementById("stats");
+
+  const aggregate = (rows, field, topN=8) => {
+    const agg = new Map();
+    rows.forEach(d => {
+      const key = d[field] || "(n/d)";
+      const v = d.effetto_2025;
+      if (typeof v !== "number") return;
+      const prev = agg.get(key) || {sum: 0, n: 0};
+      prev.sum += v; prev.n += 1;
+      agg.set(key, prev);
+    });
+    return [...agg.entries()]
+      .map(([k, v]) => ({key: k, sum: v.sum, n: v.n, abs: Math.abs(v.sum)}))
+      .sort((a, b) => b.abs - a.abs)
+      .slice(0, topN);
+  };
+
+  const renderPanel = (panelId, field, items) => {
+    const root = document.querySelector(`#${panelId} .rows`);
+    const max = items.length ? items[0].abs : 1;
+    root.innerHTML = items.map(it => {
+      const pct = (it.abs / max * 100).toFixed(1);
+      const lbl = (it.key.length > 38 ? it.key.slice(0, 36) + "…" : it.key);
+      const val = (it.sum).toLocaleString("it-IT", {maximumFractionDigits: 0});
+      return `<div class="bar-row" data-field="${field}" data-key="${it.key.replace(/"/g, "&quot;")}">
+        <span class="lbl" title="${it.key} — ${it.n} misure">${lbl}</span>
+        <div class="bar-cell"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <span class="val">${val}</span>
+      </div>`;
+    }).join("");
+  };
+
+  const refreshDashboard = () => {
+    const data = table.getRows("active").map(r => r.getData());
+    renderPanel("panel-missione", "missione", aggregate(data, "missione"));
+    renderPanel("panel-tributo",  "tributo",  aggregate(data, "tributo"));
+    renderPanel("panel-natura",   "natura",   aggregate(data, "natura"));
+  };
+
+  // Click a dashboard label -> set the corresponding header filter
+  document.addEventListener("click", (e) => {
+    const row = e.target.closest(".bar-row");
+    if (!row) return;
+    const field = row.dataset.field, key = row.dataset.key;
+    // toggle: if already filtered to this value, clear
+    const cur = table.getHeaderFilterValue(field);
+    table.setHeaderFilterValue(field, cur === key ? "" : key);
+  });
+
   const updateStats = () => {
     const rows = table.getRows("active");
     let sum = 0, n = 0;
@@ -140,6 +242,7 @@ fetch("measures.json").then(r => r.json()).then(data => {
       if (typeof v === "number") { sum += v; n++; }
     });
     stats.textContent = `${rows.length} misure visibili · Σ effetto 2025 (quantificate, ${n}): ${sum.toLocaleString("it-IT", {maximumFractionDigits: 0})} mln €`;
+    refreshDashboard();
   };
   table.on("dataFiltered", updateStats);
   table.on("tableBuilt", updateStats);
