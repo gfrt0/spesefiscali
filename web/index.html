@@ -641,11 +641,12 @@ function initTable(data) {
         },
         headerTooltip: "Indica se la misura è in vigore da più di cinque anni (proxy di stratificazione storica)"},
       {title: "Pag.",        field: "page", width: 55, hozAlign: "right",
-        headerTooltip: "Pagina del PDF RSF 2024 in cui la misura compare (link diretto)",
+        headerTooltip: () => `Pagina del PDF RSF ${currentYear} in cui la misura compare (link diretto)`,
         formatter: (cell) => {
           const v = cell.getValue();
           if (!v) return "";
-          return `<a href="https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf#page=${v}" target="_blank">${v}</a>`;
+          const pdf = RSF_PDFS[currentYear];
+          return pdf ? `<a href="${pdf}#page=${v}" target="_blank">${v}</a>` : String(v);
         }},
     ],
   });
