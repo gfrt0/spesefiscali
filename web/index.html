@@ -75,6 +75,38 @@
     white-space: nowrap;
     pointer-events: none;
   }
+  .bar-row.active {
+    background: #fef7e0;
+    border-radius: 3px;
+    box-shadow: inset 2px 0 0 #d6a000;
+    padding-left: 4px;
+    margin-left: -4px;
+  }
+  .bar-row.active .lbl { font-weight: 600; }
+  .pills {
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+    margin-bottom: 8px; min-height: 22px;
+  }
+  .pills.empty { display: none; }
+  .pills .label { color: var(--muted); font-size: 12px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px 3px 10px;
+    background: #e8f1fa; border: 1px solid #c2ddf2; border-radius: 12px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .pill:hover { background: #d8e5f2; }
+  .pill .field { color: var(--muted); margin-right: 2px; }
+  .pill .x { color: #888; font-weight: 700; padding-left: 2px; }
+  .pill:hover .x { color: #c0392b; }
+  .pill-clear-all {
+    background: transparent; border: none;
+    color: var(--muted); font-size: 12px; cursor: pointer;
+    padding: 3px 6px;
+  }
+  .pill-clear-all:hover { color: #c0392b; text-decoration: underline; }
   #search {
     flex: 1; min-width: 240px;
     padding: 8px 10px; font-size: 14px;
@@ -126,6 +158,8 @@
   <a href="https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf" target="_blank">RSF 2024</a>.
   Cerca, filtra e ordina. Effetti finanziari in milioni di euro (negativo = minor gettito).
 </div>
+
+<div class="pills empty" id="pills"></div>
 
 <div class="dash">
   <div class="panel" id="panel-missione"><h3>Per missione (top 8)</h3><div class="rows"></div></div>
@@ -298,14 +332,42 @@ fetch("measures.json").then(r => r.json()).then(data => {
       .slice(0, topN);
   };
 
+  // ---- Filter state (single source of truth for dashboard + text search) ----
+  const activeFilters = {};   // field -> selected value (one per field)
+
+  const filterFieldsForSearch = ["descrizione", "norma", "beneficiari",
+                                 "missione", "natura", "tributo_norm",
+                                 "categoria", "tributo"];
+
+  const applyFilters = () => {
+    const q = (document.getElementById("search").value || "").trim().toLowerCase();
+    const dashEntries = Object.entries(activeFilters);
+    if (!q && !dashEntries.length) {
+      table.clearFilter();  // only generic filters; preserves header filters
+      return;
+    }
+    table.setFilter((d) => {
+      for (const [f, v] of dashEntries) {
+        if ((d[f] || "") !== v) return false;
+      }
+      if (q) {
+        const hay = filterFieldsForSearch.map(f => d[f] || "").join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  };
+
   const renderPanel = (panelId, field, items) => {
     const root = document.querySelector(`#${panelId} .rows`);
     const max = items.length ? items[0].abs : 1;
+    const sel = activeFilters[field];
     root.innerHTML = items.map(it => {
       const pct = (it.abs / max * 100).toFixed(1);
       const lbl = (it.key.length > 38 ? it.key.slice(0, 36) + "…" : it.key);
       const val = (it.sum).toLocaleString("it-IT", {maximumFractionDigits: 0});
-      return `<div class="bar-row" data-field="${field}" data-key="${it.key.replace(/"/g, "&quot;")}">
+      const active = sel === it.key ? " active" : "";
+      return `<div class="bar-row${active}" data-field="${field}" data-key="${it.key.replace(/"/g, "&quot;")}">
         <span class="lbl" title="${it.key} — ${it.n} misure">${lbl}</span>
         <div class="bar-cell">
           <div class="bar-fill" style="width:${pct}%"></div>
@@ -322,14 +384,50 @@ fetch("measures.json").then(r => r.json()).then(data => {
     renderPanel("panel-natura",    "natura",    aggregate(data, "natura"));
   };
 
-  // Click a dashboard label -> set the corresponding header filter
+  const FIELD_LABELS = {
+    missione: "Missione", categoria: "Categoria", natura: "Natura",
+    tributo_norm: "Tributo",
+  };
+  const renderPills = () => {
+    const root = document.getElementById("pills");
+    const entries = Object.entries(activeFilters);
+    if (!entries.length) {
+      root.innerHTML = "";
+      root.classList.add("empty");
+      return;
+    }
+    root.classList.remove("empty");
+    const pills = entries.map(([f, v]) => {
+      const lbl = FIELD_LABELS[f] || f;
+      return `<span class="pill" data-field="${f}"><span class="field">${lbl}:</span><b>${v}</b><span class="x">×</span></span>`;
+    }).join("");
+    root.innerHTML = `<span class="label">Filtri attivi:</span> ${pills}` +
+      ` <button class="pill-clear-all" id="pill-clear-all">azzera</button>`;
+  };
+
+  const refreshAll = () => { applyFilters(); refreshDashboard(); renderPills(); };
+
+  // Click a dashboard row -> toggle that filter (one click apply, one click clear)
   document.addEventListener("click", (e) => {
     const row = e.target.closest(".bar-row");
     if (!row) return;
     const field = row.dataset.field, key = row.dataset.key;
-    // toggle: if already filtered to this value, clear
-    const cur = table.getHeaderFilterValue(field);
-    table.setHeaderFilterValue(field, cur === key ? "" : key);
+    if (activeFilters[field] === key) delete activeFilters[field];
+    else activeFilters[field] = key;
+    refreshAll();
+  });
+
+  // Pill clicks: clear that filter (or all)
+  document.getElementById("pills").addEventListener("click", (e) => {
+    if (e.target.id === "pill-clear-all") {
+      Object.keys(activeFilters).forEach(k => delete activeFilters[k]);
+      refreshAll();
+      return;
+    }
+    const pill = e.target.closest(".pill");
+    if (!pill) return;
+    delete activeFilters[pill.dataset.field];
+    refreshAll();
   });
 
   const updateStats = () => {
@@ -377,20 +475,7 @@ fetch("measures.json").then(r => r.json()).then(data => {
   });
 
   const search = document.getElementById("search");
-  search.addEventListener("input", () => {
-    const q = search.value.trim().toLowerCase();
-    if (!q) { table.clearFilter(true); return; }
-    table.setFilter((d) => {
-      return (
-        (d.descrizione && d.descrizione.toLowerCase().includes(q)) ||
-        (d.norma && d.norma.toLowerCase().includes(q)) ||
-        (d.beneficiari && d.beneficiari.toLowerCase().includes(q)) ||
-        (d.missione && d.missione.toLowerCase().includes(q)) ||
-        (d.natura && d.natura.toLowerCase().includes(q)) ||
-        (d.tributo && d.tributo.toLowerCase().includes(q))
-      );
-    });
-  });
+  search.addEventListener("input", applyFilters);
 });
 </script>
 </body>
