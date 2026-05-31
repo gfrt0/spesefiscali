@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Spese fiscali italiane — RSF 2024</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://unpkg.com/tabulator-tables@6.3.0/dist/css/tabulator_simple.min.css" rel="stylesheet">
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #666;
+    --border: #d8d8d8;
+    --neg: #b03030;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--fg);
+    margin: 0;
+    padding: 16px 20px 32px;
+    max-width: 100%;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin-bottom: 12px; font-size: 13px; }
+  .sub a { color: var(--muted); }
+  .controls {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  #search {
+    flex: 1; min-width: 240px;
+    padding: 8px 10px; font-size: 14px;
+    border: 1px solid var(--border); border-radius: 4px;
+  }
+  .stats { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .neg { color: var(--neg); font-variant-numeric: tabular-nums; text-align: right; }
+  .num { font-variant-numeric: tabular-nums; text-align: right; }
+  .descr { white-space: normal; }
+  #table { font-size: 13px; }
+  .tabulator { border: 1px solid var(--border); }
+  .tabulator .tabulator-header .tabulator-col {
+    background: #f5f5f5;
+  }
+  a { color: #0a58ca; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<h1>Spese fiscali italiane — Rapporto Annuale 2024</h1>
+<div class="sub">
+  Le 575 misure catalogate nella Tavola 1 del
+  <a href="https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf" target="_blank">RSF 2024</a>.
+  Cerca, filtra e ordina. Effetti finanziari in milioni di euro (negativo = minor gettito).
+</div>
+
+<div class="controls">
+  <input id="search" type="search" placeholder="Cerca in descrizione, norma, beneficiari, missione…" autofocus>
+  <span class="stats" id="stats"></span>
+</div>
+
+<div id="table"></div>
+
+<script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
+<script>
+const fmtEUR = (cell) => {
+  const v = cell.getValue();
+  if (v === null || v === undefined || v === "") return "";
+  const s = (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
+  return Number(s).toLocaleString("it-IT");
+};
+const colorNeg = (cell) => {
+  const v = cell.getValue();
+  if (v !== null && v < 0) cell.getElement().classList.add("neg");
+  else if (v !== null) cell.getElement().classList.add("num");
+  return fmtEUR(cell);
+};
+
+// Normattiva search URL builder: just send the text of "norma" to a Google site-search,
+// which is far more robust than parsing Italian legal cites by hand.
+const normaLink = (cell) => {
+  const v = cell.getValue();
+  if (!v) return "";
+  const q = encodeURIComponent("site:normattiva.it " + v);
+  return `<a href="https://www.google.com/search?q=${q}" target="_blank">${v}</a>`;
+};
+
+fetch("measures.json").then(r => r.json()).then(data => {
+  const table = new Tabulator("#table", {
+    data,
+    layout: "fitDataStretch",
+    height: "calc(100vh - 160px)",
+    pagination: false,
+    headerFilterLiveFilterDelay: 200,
+    initialSort: [{column: "effetto_2025", dir: "asc"}],
+    columns: [
+      {title: "N.",          field: "n", width: 55, headerFilter: false, hozAlign: "right"},
+      {title: "Missione",    field: "missione", width: 200,
+        headerFilter: "list",
+        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true}},
+      {title: "Norma",       field: "norma", width: 230, headerFilter: "input",
+        formatter: normaLink},
+      {title: "Descrizione", field: "descrizione", widthGrow: 3, minWidth: 280,
+        headerFilter: "input",
+        formatter: "textarea",
+        cssClass: "descr"},
+      {title: "Tributo",     field: "tributo", width: 110,
+        headerFilter: "list",
+        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true}},
+      {title: "Vigenza",     field: "termine_vigenza", width: 90, headerFilter: "input"},
+      {title: "Natura",      field: "natura", width: 160,
+        headerFilter: "list",
+        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true}},
+      {title: "2025",        field: "effetto_2025", width: 95, hozAlign: "right",
+        formatter: colorNeg, sorter: "number"},
+      {title: "2026",        field: "effetto_2026", width: 95, hozAlign: "right",
+        formatter: colorNeg, sorter: "number"},
+      {title: "2027",        field: "effetto_2027", width: 95, hozAlign: "right",
+        formatter: colorNeg, sorter: "number"},
+      {title: "Beneficiari", field: "beneficiari", width: 200, headerFilter: "input"},
+      {title: ">5 anni",     field: "vigore_5plus", width: 80, headerFilter: "input"},
+      {title: "p.",          field: "page", width: 50, hozAlign: "right",
+        formatter: (cell) => {
+          const v = cell.getValue();
+          if (!v) return "";
+          return `<a href="https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf#page=${v}" target="_blank">${v}</a>`;
+        }},
+    ],
+  });
+
+  const stats = document.getElementById("stats");
+  const updateStats = () => {
+    const rows = table.getRows("active");
+    let sum = 0, n = 0;
+    rows.forEach(r => {
+      const v = r.getData().effetto_2025;
+      if (typeof v === "number") { sum += v; n++; }
+    });
+    stats.textContent = `${rows.length} misure visibili · Σ effetto 2025 (quantificate, ${n}): ${sum.toLocaleString("it-IT", {maximumFractionDigits: 0})} mln €`;
+  };
+  table.on("dataFiltered", updateStats);
+  table.on("tableBuilt", updateStats);
+
+  const search = document.getElementById("search");
+  search.addEventListener("input", () => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) { table.clearFilter(true); return; }
+    table.setFilter((d) => {
+      return (
+        (d.descrizione && d.descrizione.toLowerCase().includes(q)) ||
+        (d.norma && d.norma.toLowerCase().includes(q)) ||
+        (d.beneficiari && d.beneficiari.toLowerCase().includes(q)) ||
+        (d.missione && d.missione.toLowerCase().includes(q)) ||
+        (d.natura && d.natura.toLowerCase().includes(q)) ||
+        (d.tributo && d.tributo.toLowerCase().includes(q))
+      );
+    });
+  });
+});
+</script>
+</body>
+</html>
