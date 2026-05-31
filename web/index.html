@@ -357,12 +357,23 @@ const prettyBeneficiari = (s) => {
 };
 
 fetch("measures.json").then(r => r.json()).then(data => {
+  // Parse an Italian-formatted number string ("1.234,5" -> 1234.5).
+  const parseIT = (s) => {
+    if (s === null || s === undefined || s === "") return null;
+    const t = String(s).trim();
+    if (!t || /non quantif/i.test(t)) return null;
+    const n = Number(t.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  };
+
   data.forEach(d => {
     if (d.missione)     d.missione     = shortMissione(d.missione);
     if (d.tributo_norm) d.tributo_norm = TRIBUTO_PRETTY[d.tributo_norm] || d.tributo_norm;
     if (d.categoria)    d.categoria    = CATEGORIA_PRETTY[d.categoria]  || sentenceCase(d.categoria);
     if (d.natura)       d.natura       = prettyNatura(d.natura);
     if (d.beneficiari)  d.beneficiari  = prettyBeneficiari(d.beneficiari);
+    d.numero_frequenze  = parseIT(d.numero_frequenze);
+    d.effetto_procapite = parseIT(d.effetto_procapite);
   });
   const table = new Tabulator("#table", {
     data,
@@ -372,9 +383,9 @@ fetch("measures.json").then(r => r.json()).then(data => {
     headerFilterLiveFilterDelay: 200,
     initialSort: [{column: "effetto_2025", dir: "asc"}],
     columns: [
-      {title: "N.",          field: "n", width: 55, headerFilter: false, hozAlign: "right",
+      {title: "N.",          field: "n", width: 45, headerFilter: false, hozAlign: "right",
         headerTooltip: "Numero d'ordine nella Tavola 1 dell'RSF 2024"},
-      {title: "Missione",    field: "missione", width: 180,
+      {title: "Missione",    field: "missione", width: 160,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Missione di spesa cui la misura è associata nel bilancio dello Stato (etichetta abbreviata; il dato grezzo è la denominazione ufficiale RSF)"},
@@ -386,11 +397,11 @@ fetch("measures.json").then(r => r.json()).then(data => {
         formatter: "textarea",
         cssClass: "descr",
         headerTooltip: "Descrizione sintetica della misura come riportata in RSF 2024"},
-      {title: "Tributo",     field: "tributo_norm", width: 110,
+      {title: "Tributo",     field: "tributo_norm", width: 95,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Tributo normalizzato. Combo come IRPEF+IRES indicano misure che operano su più tributi. CREDITO è una forma di erogazione (credito d'imposta)"},
-      {title: "Categoria",   field: "categoria", width: 130,
+      {title: "Categoria",   field: "categoria", width: 115,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Categoria fiscale: DIRETTA (IRPEF, IRES, IRAP), INDIRETTA (IVA, accisa, registro/bollo, successioni), SOSTITUTIVA, CREDITO_IMPOSTA, MISTA, ALTRO"},
@@ -402,27 +413,47 @@ fetch("measures.json").then(r => r.json()).then(data => {
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Tipologia tecnica della misura: esenzione, deduzione, detrazione, credito d'imposta, riduzione d'aliquota, regime speciale, ..."},
-      {title: "2025",        field: "effetto_2025", width: 90, hozAlign: "right",
+      {title: "2025",        field: "effetto_2025", width: 80, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
         headerTooltip: "Effetto finanziario stimato per il 2025 in milioni di euro (negativo = minor gettito per l'erario)"},
-      {title: "2026",        field: "effetto_2026", width: 90, hozAlign: "right",
+      {title: "2026",        field: "effetto_2026", width: 80, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
         headerTooltip: "Effetto finanziario stimato per il 2026 in milioni di euro"},
-      {title: "2027",        field: "effetto_2027", width: 90, hozAlign: "right",
+      {title: "2027",        field: "effetto_2027", width: 80, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
         headerTooltip: "Effetto finanziario stimato per il 2027 in milioni di euro"},
       {title: "Beneficiari", field: "beneficiari", width: 200, headerFilter: "input",
         headerTooltip: "Soggetti e categorie dei beneficiari (persone fisiche, imprese, particolari categorie, ...)"},
-      {title: "Frequenze",   field: "numero_frequenze", width: 100, headerFilter: "input", visible: false,
+      {title: "Frequenze",   field: "numero_frequenze", width: 95, hozAlign: "right",
+        sorter: "number", sorterParams: {alignEmptyValues: "bottom"},
+        visible: false,
+        formatter: (cell) => {
+          const v = cell.getValue();
+          return (v === null || v === undefined) ? "" : v.toLocaleString("it-IT");
+        },
         headerTooltip: "Numero di beneficiari osservato (frequenza), quando disponibile"},
-      {title: "Pro capite",  field: "effetto_procapite", width: 110, headerFilter: "input", visible: false,
+      {title: "Pro capite",  field: "effetto_procapite", width: 105, hozAlign: "right",
+        sorter: "number", sorterParams: {alignEmptyValues: "bottom"},
+        visible: false,
+        formatter: (cell) => {
+          const v = cell.getValue();
+          if (v === null || v === undefined) return "";
+          const cls = v < 0 ? "neg" : "num";
+          cell.getElement().classList.add(cls);
+          return v.toLocaleString("it-IT", {maximumFractionDigits: 1}) + " €";
+        },
         headerTooltip: "Effetto finanziario medio pro capite in euro, quando disponibile"},
-      {title: ">5 anni",     field: "vigore_5plus", width: 80, headerFilter: "input", visible: false,
+      {title: ">5 anni",     field: "vigore_5plus", width: 70, hozAlign: "center",
+        visible: false,
+        formatter: (cell) => {
+          const v = (cell.getValue() || "").trim();
+          return v ? '<span style="color:#1a8c1a;font-weight:700">✓</span>' : "";
+        },
         headerTooltip: "Indica se la misura è in vigore da più di cinque anni (proxy di stratificazione storica)"},
-      {title: "Pagina",      field: "page", width: 70, hozAlign: "right",
+      {title: "Pag.",        field: "page", width: 55, hozAlign: "right",
         headerTooltip: "Pagina del PDF RSF 2024 in cui la misura compare (link diretto)",
         formatter: (cell) => {
           const v = cell.getValue();
