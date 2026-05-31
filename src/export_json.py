@@ -23,7 +23,7 @@ def load_cleaned_descrizioni() -> dict[int, str]:
         return {int(r["n"]): r["descrizione_clean"] for r in csv.DictReader(f)}
 
 COLS_FOR_UI = [
-    "n", "missione", "norma", "descrizione", "tributo",
+    "n", "measure_uid", "missione", "norma", "descrizione", "tributo",
     "termine_vigenza", "natura",
     "effetto_t0 AS effetto_y0",
     "effetto_t1 AS effetto_y1",
@@ -76,6 +76,23 @@ def main():
         size_kb = (WEB / f"measures_{y}.json").stat().st_size / 1024
         summary.append((y, n_rows, n_url, size_kb))
         print(f"  {y}: {n_rows} rows, {n_url} Normattiva URLs ({100*n_url/n_rows:.0f}%), {size_kb:.0f} KB")
+
+    # Compact panel: { measure_uid: [[year, effetto_t0], ...] } for sparklines.
+    panel: dict[str, list] = {}
+    for uid, yr, eff in con.execute("""
+        SELECT measure_uid, rsf_year, effetto_t0
+        FROM measures
+        WHERE measure_uid IS NOT NULL
+        ORDER BY measure_uid, rsf_year
+    """):
+        panel.setdefault(uid, []).append([yr, eff])
+    (WEB / "panel.json").write_text(
+        json.dumps(panel, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    print(f"  panel.json: {len(panel)} UIDs, "
+          f"{sum(len(v) for v in panel.values())} (year, effetto) pairs, "
+          f"{(WEB / 'panel.json').stat().st_size/1024:.0f} KB")
 
     # Back-compat alias used by older deploys: measures.json -> latest year
     latest = max(years)

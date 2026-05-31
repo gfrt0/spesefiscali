@@ -254,12 +254,15 @@
     </ul>
     <p>Il pannello «Per governo istitutore» nella dashboard ha un pulsante <em>↻ ultimo intervento</em> per alternare i due punti di vista. La colonna <em># interventi</em> (mostrabile via il menù Colonne) conta quante norme distinte sono citate per ciascuna misura. Nessuna delle due attribuzioni equivale a un voto parlamentare: la maggior parte delle modifiche fiscali transita in maxi-emendamenti alle Leggi di Bilancio approvati con voto di fiducia.</p>
 
-    <h3>Edizioni precedenti — copertura ridotta</h3>
-    <p>Il selettore di anno permette di consultare le edizioni RSF 2016–2024 (oggetto la Tavola 1 di ciascuna). Per le edizioni anteriori al 2022 due limitazioni sono note:</p>
+    <h3>Edizioni precedenti — copertura</h3>
+    <p>Il selettore di anno permette di consultare le edizioni RSF 2016–2024 (oggetto la Tavola 1 di ciascuna). Una limitazione nota:</p>
     <ul>
-      <li><strong>Link a Normattiva</strong>: solo il ~40% delle norme di riferimento risolvono in URL diretto, perché le edizioni meno recenti usano citazioni abbreviate (es. <em>L. 178/2020</em> invece di <em>L. 30 dicembre 2020, n. 178</em>) prive della data esatta richiesta dal sistema URN. Per le restanti la colonna <em>Norma</em> rimanda comunque a una ricerca Google su normattiva.it.</li>
       <li><strong>Pulizia descrizioni</strong>: la correzione tramite Gemini delle spaziature mancanti è stata applicata solo alle 575 descrizioni della RSF 2024. Le altre edizioni mostrano il testo grezzo estratto dal PDF, occasionalmente con parole concatenate (es. <em>del50%</em>).</li>
     </ul>
+
+    <h3>Colonna <em>Trend</em> (sparkline)</h3>
+    <p>Mostra l’andamento dell’effetto finanziario «T+1» (la prima delle tre annualità previste, quella più vicina nel tempo) per la stessa misura attraverso le 9 edizioni RSF. Le misure sono accoppiate tramite un identificativo derivato dalla norma istitutiva (~96% delle righe ottiene un identificativo); le altre non mostrano sparkline.</p>
+    <p>Il punto giallo evidenzia l’anno RSF correntemente selezionato. Il passaggio del mouse mostra i valori anno per anno. Una linea quasi piatta indica una misura strutturale; una linea che esplode dopo il 2020 indica tipicamente Superbonus / Ecobonus / crediti d’imposta espansi durante il PNRR.</p>
 
     <h3>Pro capite — segno normalizzato</h3>
     <p>In 6 misure su 127 con valore non vuoto, l’RSF 2024 riporta nella colonna <em>Effetto pro capite</em> il modulo (valore assoluto) mentre i totali macro (2025/2026/2027) sono firmati negativi. Verificato che reported<sub>i</sub>&nbsp;=&nbsp;|effetto<sub>i</sub>/frequenze<sub>i</sub>| nelle 6 anomalie, abbiamo allineato il segno del pro capite a quello del totale, così che tutte le righe rispettino la convenzione «negativo = minor gettito per l’erario».</p>
@@ -426,6 +429,43 @@ const RSF_PDFS = {
 };
 
 let currentYear = 2024;  // updated by loadYear()
+let panelData = {};      // measure_uid -> [[year, effetto], ...]; loaded once
+
+// Render an inline sparkline for one measure's effetto trajectory across
+// RSF editions. Returns an SVG string (or "" if not enough points).
+const SPARK_W = 80, SPARK_H = 22, SPARK_PAD = 2;
+const SPARK_YEAR_MIN = 2016, SPARK_YEAR_MAX = 2024;
+function sparkline(uid) {
+  if (!uid) return "";
+  const series = panelData[uid];
+  if (!series || series.length < 2) return "";
+  const vals = series.map(p => p[1]).filter(v => typeof v === "number");
+  if (vals.length < 2) return "";
+  let min = Math.min(...vals), max = Math.max(...vals);
+  if (max === min) { max += 1; min -= 1; }   // avoid 0-range collapse
+  const xOf = y => SPARK_PAD + (SPARK_W - 2*SPARK_PAD) * (y - SPARK_YEAR_MIN) / (SPARK_YEAR_MAX - SPARK_YEAR_MIN);
+  const yOf = v => SPARK_H - SPARK_PAD - (SPARK_H - 2*SPARK_PAD) * (v - min) / (max - min);
+  const pts = series.filter(p => typeof p[1] === "number")
+                    .map(p => `${xOf(p[0]).toFixed(1)},${yOf(p[1]).toFixed(1)}`);
+  if (pts.length < 2) return "";
+  const path = "M" + pts.join("L");
+  // Highlight the dot for the currently-selected RSF year (if present)
+  const cur = series.find(p => p[0] === currentYear && typeof p[1] === "number");
+  const dot = cur
+    ? `<circle cx="${xOf(currentYear).toFixed(1)}" cy="${yOf(cur[1]).toFixed(1)}" r="2" fill="#d6a000" stroke="#fff" stroke-width=".7"/>`
+    : "";
+  return `<svg width="${SPARK_W}" height="${SPARK_H}" viewBox="0 0 ${SPARK_W} ${SPARK_H}" style="display:block">`
+       + `<path d="${path}" fill="none" stroke="#b03030" stroke-width="1.2"/>${dot}</svg>`;
+}
+
+function sparklineTooltip(cell) {
+  const uid = cell.getRow().getData().measure_uid;
+  if (!uid || !panelData[uid]) return "";
+  const series = panelData[uid];
+  const fmt = v => v === null ? "n/d" : fmtMlnAdaptive(v);
+  return "Effetto stimato (T+1) per anno RSF:\n" +
+    series.map(([y, v]) => `  ${y}: ${fmt(v)}`).join("\n");
+}
 
 // Parse an Italian-formatted number string ("1.234,5" -> 1234.5).
 const parseIT = (s) => {
@@ -458,7 +498,11 @@ function prepData(data) {
 }
 
 async function bootstrap() {
-  const meta = await (await fetch("years.json")).json();
+  const [meta, panel] = await Promise.all([
+    (await fetch("years.json")).json(),
+    (await fetch("panel.json")).json().catch(() => ({})),
+  ]);
+  panelData = panel;
   const sel = document.getElementById("year-selector");
   sel.innerHTML = meta.years.map(y => `<option value="${y}">RSF ${y}</option>`).join("");
 
@@ -545,6 +589,11 @@ function initTable(data) {
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Tipologia tecnica della misura: esenzione, deduzione, detrazione, credito d'imposta, riduzione d'aliquota, regime speciale, ..."},
+      {title: "Trend",       field: "measure_uid", width: 90, hozAlign: "center",
+        headerSort: false,
+        formatter: (cell) => sparkline(cell.getValue()),
+        tooltip: sparklineTooltip,
+        headerTooltip: "Andamento di Effetto T+1 attraverso le 9 edizioni RSF (2016–2024) per la stessa misura. Punto giallo: anno selezionato."},
       {title: "T+1",         field: "effetto_y0", width: 80, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
