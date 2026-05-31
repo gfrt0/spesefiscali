@@ -56,14 +56,28 @@ ART_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Main citation matcher: TIPO + date + numero
+_TIPO = (r"d\.?\s*lgs\.?|decreto\s+legislativo|d\.?\s*l\.?(?!\s*g)|"
+         r"decreto[-\s]+legge|d\.?\s*p\.?\s*r\.?|d\.?\s*m\.?|r\.?\s*d\.?|"
+         r"legge|l\.\s*c\.|l\.")
+
+# Full-form citation: TIPO + DD MONTH YYYY + n. NUM
 CITE_RE = re.compile(
-    r"(?P<tipo>d\.?\s*lgs\.?|decreto\s+legislativo|d\.?\s*l\.?(?!\s*g)|"
-    r"decreto[-\s]+legge|d\.?\s*p\.?\s*r\.?|d\.?\s*m\.?|r\.?\s*d\.?|"
-    r"legge|l\.\s*c\.|l\.)\s*"
+    rf"(?P<tipo>{_TIPO})\s*"
     r"(?P<giorno>\d{1,2})°?\s+"
     r"(?P<mese>gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+"
     r"(?P<anno>\d{4})\s*,?\s*n\.\s*(?P<num>\d+)",
+    re.IGNORECASE,
+)
+
+# Abbreviated forms used heavily in RSF 2016-2021:
+#   "D.P.R. 633/72"  "Legge 604/1954"  "L. 178/2020"
+CITE_SHORT = re.compile(
+    rf"\b(?P<tipo>{_TIPO})\s*(?:n\.\s*)?(?P<num>\d{{1,5}})\s*/\s*(?P<yy>\d{{2,4}})\b",
+    re.IGNORECASE,
+)
+#   "D.L. n. 34 del 2019"  "legge n. 116 del 1995"  "D.lgs. N. 347 del 1990"
+CITE_DEL = re.compile(
+    rf"\b(?P<tipo>{_TIPO})\s*(?:n\.\s*)?(?P<num>\d{{1,5}})\s+del\s+(?P<yy>\d{{4}})\b",
     re.IGNORECASE,
 )
 
@@ -112,8 +126,24 @@ def _norm_tipo(tipo_raw: str) -> str | None:
     return None
 
 
+def _norm_anno(yy: str) -> str:
+    return yy if len(yy) == 4 else ("19" + yy if int(yy) >= 30 else "20" + yy)
+
+
 def parse_norma(s: str) -> Parsed:
-    """Return the first parseable citation in `s`, preferring full cites over TU."""
+    """Return the first parseable citation in `s`.
+
+    Preference order:
+      1. Full-form citation (TIPO + DD MONTH YYYY + n. NUM)
+      2. Testi Unici reference (TUIR/TUA/...)
+      3. Abbreviated form ('D.P.R. 633/72' / 'L. 178 del 2020')
+
+    Abbreviated cites carry only the year (no day/month). Normattiva
+    accepts year-only URNs of the form 'urn:nir:stato:legge:2020;178' --
+    they resolve to the same consolidated text -- so we still produce a
+    working URL, with the `data` field set to '<YYYY>' rather than
+    '<YYYY>-MM-DD'.
+    """
     if not s:
         return Parsed()
     art_m = ART_RE.search(s)
@@ -125,15 +155,10 @@ def parse_norma(s: str) -> Parsed:
         tipo = _norm_tipo(cite_m.group("tipo"))
         mese = MESI[cite_m.group("mese").lower()]
         giorno = cite_m.group("giorno").zfill(2)
-        anno = cite_m.group("anno")
-        data = f"{anno}-{mese}-{giorno}"
-        num = cite_m.group("num")
-        # only attach art/comma if they appear *before* the cite (primary cite)
-        if art_m and art_m.start() < cite_m.end():
-            pass  # keep
-        else:
+        data = f"{cite_m.group('anno')}-{mese}-{giorno}"
+        if not (art_m and art_m.start() < cite_m.end()):
             articolo = comma = None
-        return Parsed(tipo=tipo, data=data, numero=num,
+        return Parsed(tipo=tipo, data=data, numero=cite_m.group("num"),
                       articolo=articolo, comma=comma, source="cite")
 
     tu_m = TU_RE.search(s)
@@ -142,6 +167,16 @@ def parse_norma(s: str) -> Parsed:
         tipo, data, num = TU[key]
         return Parsed(tipo=tipo, data=data, numero=num,
                       articolo=articolo, comma=comma, source="tu")
+
+    # Fall back to abbreviated cite forms (year-only date).
+    short_m = CITE_SHORT.search(s) or CITE_DEL.search(s)
+    if short_m:
+        tipo = _norm_tipo(short_m.group("tipo"))
+        anno = _norm_anno(short_m.group("yy"))
+        if not (art_m and art_m.start() < short_m.end()):
+            articolo = comma = None
+        return Parsed(tipo=tipo, data=anno, numero=short_m.group("num"),
+                      articolo=articolo, comma=comma, source="cite-short")
 
     return Parsed()
 
