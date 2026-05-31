@@ -148,15 +148,86 @@
   }
   a { color: #0a58ca; text-decoration: none; }
   a:hover { text-decoration: underline; }
+  .topbar {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 16px; margin-bottom: 6px;
+  }
+  .topbar .right {
+    display: flex; gap: 14px; align-items: center;
+    font-size: 13px; color: var(--muted);
+  }
+  .topbar .right a { color: var(--muted); }
+  .topbar .right a:hover { color: #0a58ca; }
+  .footer {
+    margin-top: 16px;
+    font-size: 12px; color: var(--muted);
+    text-align: center;
+  }
+  .modal-backdrop {
+    display: none;
+    position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: #fff; max-width: 720px; max-height: 80vh; overflow: auto;
+    padding: 22px 28px; border-radius: 6px; line-height: 1.5;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25);
+  }
+  .modal h2 { font-size: 17px; margin: 0 0 10px; }
+  .modal h3 { font-size: 14px; margin: 14px 0 4px; }
+  .modal p, .modal li { font-size: 13px; }
+  .modal ul { padding-left: 18px; margin: 4px 0; }
+  .modal .close {
+    float: right; background: none; border: none; font-size: 20px;
+    color: var(--muted); cursor: pointer; line-height: 1;
+  }
 </style>
 </head>
 <body>
 
-<h1>Spese fiscali italiane — Rapporto Annuale 2024</h1>
-<div class="sub">
-  Le 575 misure catalogate nella Tavola 1 del
-  <a href="https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf" target="_blank">RSF 2024</a>.
-  Cerca, filtra e ordina. Effetti finanziari in milioni (mln) o miliardi (mld) di euro; negativo = minor gettito.
+<div class="topbar">
+  <div>
+    <h1>Spese fiscali italiane — Rapporto Annuale 2024</h1>
+    <div class="sub">
+      Le 575 misure catalogate nella Tavola 1 del
+      <a href="https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf" target="_blank">RSF 2024</a>.
+      Cerca, filtra e ordina. Effetti finanziari in milioni (mln) o miliardi (mld) di euro; negativo = minor gettito.
+    </div>
+  </div>
+  <div class="right">
+    <a href="#" id="caveats-link">ⓘ Limiti e cautele</a>
+    <a href="https://github.com/forteg/spesefiscali" target="_blank">GitHub</a>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="caveats-modal">
+  <div class="modal">
+    <button class="close" id="caveats-close" aria-label="chiudi">×</button>
+    <h2>Limiti e cautele</h2>
+    <p>Questo database è una rielaborazione della Tavola 1 dell’<em>RSF 2024</em>. Prima di trarre conclusioni:</p>
+
+    <h3>Stime ex ante, non gettito effettivo</h3>
+    <p>Gli effetti finanziari sono stime previsionali della <em>Commissione per la redazione del rapporto annuale sulle spese fiscali</em>, non misure di gettito perso ex post. L’incertezza è significativa per misure nuove, non lineari (es. Superbonus) o con elasticità di risposta elevate.</p>
+
+    <h3>Somme non additive</h3>
+    <p>La somma degli effetti delle singole misure <strong>non equivale</strong> al gettito recuperabile se le si abolisse tutte: vi sono interazioni (eliminare una detrazione può aumentare il gettito di un’altra), comportamenti elusivi, e effetti generali di equilibrio. Inoltre alcune misure sono indicate come «non quantificabile»: la somma riportata in calce esclude queste.</p>
+
+    <h3>Categoria fiscale = scelta di design</h3>
+    <p>La colonna <em>Categoria</em> aggrega DIRETTA / INDIRETTA / SOSTITUTIVA / CREDITO_IMPOSTA / MISTA / ALTRO. In particolare, <strong>CREDITO_IMPOSTA</strong> è tenuto separato dalle dirette pur essendo, di fatto, un meccanismo di erogazione che opera tipicamente su IRPEF/IRES. È una scelta di chi ha costruito il database, non una distinzione presente nella legge.</p>
+
+    <h3>Residui di estrazione PDF</h3>
+    <p>Le descrizioni sono state estratte dal PDF originale, ripulite da spaziature mancanti tramite Gemini 2.5 Flash con un controllo di invariante carattere-per-carattere (il modello può solo aggiungere/togliere spazi, mai modificare lettere). 573/575 misure sono state pulite; 2 conservano refusi della fonte originaria.</p>
+
+    <h3>Misure mancanti</h3>
+    <p>Sono incluse le sole spese fiscali <em>erariali</em> della Tavola 1. Restano fuori: <strong>spese fiscali locali</strong> (Tavola 6), <strong>misure cessate con effetti residui</strong> (Tavola 5), spese contributive, e agevolazioni non classificate dalla Commissione come spese fiscali.</p>
+
+    <h3>Riferimenti normativi</h3>
+    <p>I link nella colonna <em>Norma</em> rimandano al testo consolidato su Normattiva per il 99,7% delle misure. I restanti rimandano a una ricerca Google su normattiva.it (es. ordinanze di P.C.M., convenzioni internazionali). La <em>norma di riferimento</em> indica la prima citazione utile; molte misure sono state modificate o prorogate da atti successivi non sempre esposti nel link.</p>
+
+    <h3>Citazione</h3>
+    <p>Quando si riportano dati o aggregati, citare sia la fonte primaria <em>(MEF, Rapporto annuale sulle spese fiscali 2024)</em> sia questo database.</p>
+  </div>
 </div>
 
 <div class="pills empty" id="pills"></div>
@@ -493,6 +564,27 @@ fetch("measures.json").then(r => r.json()).then(data => {
   const search = document.getElementById("search");
   search.addEventListener("input", applyFilters);
 });
+
+// Caveats modal
+const caveatsModal = document.getElementById("caveats-modal");
+document.getElementById("caveats-link").addEventListener("click", (e) => {
+  e.preventDefault();
+  caveatsModal.classList.add("open");
+});
+document.getElementById("caveats-close").addEventListener("click", () => {
+  caveatsModal.classList.remove("open");
+});
+caveatsModal.addEventListener("click", (e) => {
+  if (e.target === caveatsModal) caveatsModal.classList.remove("open");
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") caveatsModal.classList.remove("open");
+});
 </script>
+
+<div class="footer">
+  Fonte: <a href="https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf" target="_blank">MEF — Rapporto annuale sulle spese fiscali 2024</a>.
+  Codice e dati su <a href="https://github.com/forteg/spesefiscali" target="_blank">GitHub</a>, licenza MIT (codice) e CC BY 4.0 (dati derivati).
+</div>
 </body>
 </html>

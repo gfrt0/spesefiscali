@@ -1,0 +1,3 @@
+# Core pipeline: PDF parse + SQLite + JSON export + Datasette
+pdfplumber>=0.11
+datasette>=1.0a14

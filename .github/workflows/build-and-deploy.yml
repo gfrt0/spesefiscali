@@ -1,0 +1,92 @@
+name: build-and-deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['README.md', 'LICENSE', '.gitignore', 'docs/**']
+  workflow_dispatch:
+    inputs:
+      refresh_descrizioni:
+        description: "Re-run Gemini descrizione cleanup for any new rows"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write        # to commit refreshed data back
+  pages: write           # to deploy
+  id-token: write        # for WIF + Pages OIDC
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install core deps
+        run: pip install -r requirements.txt
+
+      - name: Rebuild SQLite + JSON from tracked CSV
+        run: |
+          python3 src/load_sqlite.py
+          python3 src/export_json.py
+
+      - name: (optional) Refresh descrizioni via Gemini
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_descrizioni == true }}
+        env:
+          GOOGLE_CLOUD_PROJECT:  ${{ vars.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_LOCATION: ${{ vars.GCP_LOCATION }}
+        run: |
+          pip install -r requirements-cleanup.txt
+          python3 src/clean_descrizioni.py
+          python3 src/export_json.py
+
+      - name: WIF auth (only for Gemini path)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_descrizioni == true }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SA_EMAIL }}
+
+      - name: Commit refreshed data (if changed)
+        id: diff
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/processed/ web/measures.json
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "(no data changes)"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git commit -m "ci: refresh data artifacts"
+            git push
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
