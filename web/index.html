@@ -179,6 +179,14 @@
   }
   .topbar .right a { color: var(--muted); }
   .topbar .right a:hover { color: #0a58ca; }
+  .year-pick {
+    font-size: 13px; padding: 5px 8px; border-radius: 4px;
+    border: 1px solid var(--border); background: #fff; cursor: pointer;
+    margin-right: 4px;
+  }
+  .year-pick:hover { background: #f5f5f5; }
+  .year-pick:disabled { cursor: default; opacity: .8; }
+  .year-pick.current { background: #fef7e0; border-color: #d6a000; font-weight: 600; }
   .footer {
     margin-top: 16px;
     font-size: 12px; color: var(--muted);
@@ -209,10 +217,11 @@
 
 <div class="topbar">
   <div>
-    <h1>Spese fiscali italiane — Rapporto Annuale 2024</h1>
+    <h1>Spese fiscali italiane — <span id="title-year">RSF 2024</span></h1>
     <div class="sub">
-      Le 575 misure catalogate nella Tavola 1 del
-      <a href="https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf" target="_blank">RSF 2024</a>.
+      Le <span id="sub-count">575</span> misure catalogate nella Tavola 1
+      del <a id="sub-rsf-link" href="#" target="_blank">Rapporto annuale sulle spese fiscali</a>
+      (<select id="year-selector" class="year-pick" aria-label="anno RSF"></select>).
       Cerca, filtra e ordina. Effetti finanziari in milioni (mln) o miliardi (mld) di euro; negativo = minor gettito.
     </div>
   </div>
@@ -244,6 +253,13 @@
       <li><strong>Governo (ult.)</strong>: esecutivo in carica alla data dell’<em>intervento normativo più recente</em> citato fra istitutiva, modifiche, proroghe ed estensioni. È spesso più informativo per misure ad alto costo che vivono di proroghe successive (es. Superbonus, Ecobonus: istituiti negli anni 2000 ma il grosso del costo è opera di interventi successivi).</li>
     </ul>
     <p>Il pannello «Per governo istitutore» nella dashboard ha un pulsante <em>↻ ultimo intervento</em> per alternare i due punti di vista. La colonna <em># interventi</em> (mostrabile via il menù Colonne) conta quante norme distinte sono citate per ciascuna misura. Nessuna delle due attribuzioni equivale a un voto parlamentare: la maggior parte delle modifiche fiscali transita in maxi-emendamenti alle Leggi di Bilancio approvati con voto di fiducia.</p>
+
+    <h3>Edizioni precedenti — copertura ridotta</h3>
+    <p>Il selettore di anno permette di consultare le edizioni RSF 2016–2024 (oggetto la Tavola 1 di ciascuna). Per le edizioni anteriori al 2022 due limitazioni sono note:</p>
+    <ul>
+      <li><strong>Link a Normattiva</strong>: solo il ~40% delle norme di riferimento risolvono in URL diretto, perché le edizioni meno recenti usano citazioni abbreviate (es. <em>L. 178/2020</em> invece di <em>L. 30 dicembre 2020, n. 178</em>) prive della data esatta richiesta dal sistema URN. Per le restanti la colonna <em>Norma</em> rimanda comunque a una ricerca Google su normattiva.it.</li>
+      <li><strong>Pulizia descrizioni</strong>: la correzione tramite Gemini delle spaziature mancanti è stata applicata solo alle 575 descrizioni della RSF 2024. Le altre edizioni mostrano il testo grezzo estratto dal PDF, occasionalmente con parole concatenate (es. <em>del50%</em>).</li>
+    </ul>
 
     <h3>Pro capite — segno normalizzato</h3>
     <p>In 6 misure su 127 con valore non vuoto, l’RSF 2024 riporta nella colonna <em>Effetto pro capite</em> il modulo (valore assoluto) mentre i totali macro (2025/2026/2027) sono firmati negativi. Verificato che reported<sub>i</sub>&nbsp;=&nbsp;|effetto<sub>i</sub>/frequenze<sub>i</sub>| nelle 6 anomalie, abbiamo allineato il segno del pro capite a quello del totale, così che tutte le righe rispettino la convenzione «negativo = minor gettito per l’erario».</p>
@@ -395,16 +411,32 @@ const prettyBeneficiari = (s) => {
   return sentenceCase(s).replace(/societa'/i, "società").replace(/imponibilita'/i, "imponibilità");
 };
 
-fetch("measures.json").then(r => r.json()).then(data => {
-  // Parse an Italian-formatted number string ("1.234,5" -> 1234.5).
-  const parseIT = (s) => {
-    if (s === null || s === undefined || s === "") return null;
-    const t = String(s).trim();
-    if (!t || /non quantif/i.test(t)) return null;
-    const n = Number(t.replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(n) ? n : null;
-  };
+// Direct download URLs of each RSF edition's source PDF, for the
+// year-selector link and for the page-deep links in the table cells.
+const RSF_PDFS = {
+  2016: "https://www.mef.gov.it/export/sites/MEF/documenti-allegati/2017/Rapporto_annuale_sulle_spese_fiscali.pdf",
+  2017: "https://www.mef.gov.it/export/sites/MEF/documenti-allegati/2018/Rapporto_annuale_sulle_spese_fiscali.pdf",
+  2018: "https://www.mef.gov.it/export/sites/MEF/documenti-allegati/2019/Rapporto_Spese_fiscali_2018.pdf",
+  2019: "https://www.mef.gov.it/export/sites/MEF/documenti-allegati/2019/Rapporto_spese_fiscali_2019_definitivo.pdf",
+  2020: "https://www.mef.gov.it/export/sites/MEF/documenti-allegati/2021/Rapporto-spese-fiscali-nov-2020.pdf",
+  2021: "https://www.mef.gov.it/export/sites/MEF/documenti-allegati/2022/pdf1_Rapporto-spese-fiscali-2021.pdf",
+  2022: "https://www.mef.gov.it/export/sites/MEF/documenti-allegati/2022/Rapporto-spese-fiscali-2022.pdf",
+  2023: "https://www.mef.gov.it/export/sites/MEF/documenti-allegati/2023/Rapporto-spese-fiscali-2023.pdf",
+  2024: "https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf",
+};
 
+let currentYear = 2024;  // updated by loadYear()
+
+// Parse an Italian-formatted number string ("1.234,5" -> 1234.5).
+const parseIT = (s) => {
+  if (s === null || s === undefined || s === "") return null;
+  const t = String(s).trim();
+  if (!t || /non quantif/i.test(t)) return null;
+  const n = Number(t.replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+};
+
+function prepData(data) {
   data.forEach(d => {
     if (d.missione)     d.missione     = shortMissione(d.missione);
     if (d.tributo_norm) d.tributo_norm = TRIBUTO_PRETTY[d.tributo_norm] || d.tributo_norm;
@@ -413,24 +445,64 @@ fetch("measures.json").then(r => r.json()).then(data => {
     if (d.beneficiari)  d.beneficiari  = prettyBeneficiari(d.beneficiari);
     d.numero_frequenze  = parseIT(d.numero_frequenze);
     d.effetto_procapite = parseIT(d.effetto_procapite);
-    // Normalize pro capite sign: in 6/127 rows the RSF reports the
-    // magnitude while the macro totals are signed. Force the per-capita
-    // to share the sign of the 2025 total when they disagree.
+    // Normalize pro capite sign vs the t0 effect (see caveats).
     if (d.effetto_procapite !== null
-        && typeof d.effetto_2025 === "number"
-        && d.effetto_2025 !== 0
+        && typeof d.effetto_y0 === "number"
+        && d.effetto_y0 !== 0
         && d.effetto_procapite !== 0
-        && Math.sign(d.effetto_procapite) !== Math.sign(d.effetto_2025)) {
+        && Math.sign(d.effetto_procapite) !== Math.sign(d.effetto_y0)) {
       d.effetto_procapite = -d.effetto_procapite;
     }
   });
-  const table = new Tabulator("#table", {
+  return data;
+}
+
+async function bootstrap() {
+  const meta = await (await fetch("years.json")).json();
+  const sel = document.getElementById("year-selector");
+  sel.innerHTML = meta.years.map(y => `<option value="${y}">RSF ${y}</option>`).join("");
+
+  // Year priority: URL hash > meta.default
+  const fromHash = new URLSearchParams(location.hash.slice(1)).get("year");
+  const start = (fromHash && meta.years.includes(+fromHash)) ? +fromHash : meta.default;
+  sel.value = start;
+
+  const data = prepData(await (await fetch(`measures_${start}.json`)).json());
+  currentYear = start;
+  updateChrome(start, data.length);
+  initTable(data);
+  sel.addEventListener("change", async (e) => {
+    const y = +e.target.value;
+    const d = prepData(await (await fetch(`measures_${y}.json`)).json());
+    currentYear = y;
+    updateChrome(y, d.length);
+    Object.keys(activeFilters).forEach(k => delete activeFilters[k]);
+    table.updateColumnDefinition("effetto_y0", {title: String(y + 1)});
+    table.updateColumnDefinition("effetto_y1", {title: String(y + 2)});
+    table.updateColumnDefinition("effetto_y2", {title: String(y + 3)});
+    table.replaceData(d).then(() => refreshAll());
+    history.replaceState(null, "", `#year=${y}`);
+  });
+}
+
+function updateChrome(year, count) {
+  document.getElementById("title-year").textContent = `RSF ${year}`;
+  document.getElementById("sub-count").textContent  = count;
+  document.getElementById("sub-rsf-link").href      = RSF_PDFS[year] || "#";
+}
+
+let table = null;
+let activeFilters = {};
+let governoMode = "governo";
+
+function initTable(data) {
+  table = new Tabulator("#table", {
     data,
     layout: "fitDataStretch",
     height: "calc(100vh - 160px)",
     pagination: false,
     headerFilterLiveFilterDelay: 200,
-    initialSort: [{column: "effetto_2025", dir: "asc"}],
+    initialSort: [{column: "effetto_y0", dir: "asc"}],
     columns: [
       {title: "N.",          field: "n", width: 45, headerFilter: false, hozAlign: "right",
         headerTooltip: "Numero d'ordine nella Tavola 1 dell'RSF 2024"},
@@ -483,15 +555,15 @@ fetch("measures.json").then(r => r.json()).then(data => {
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Tipologia tecnica della misura: esenzione, deduzione, detrazione, credito d'imposta, riduzione d'aliquota, regime speciale, ..."},
-      {title: "2025",        field: "effetto_2025", width: 80, hozAlign: "right",
+      {title: "2025",        field: "effetto_y0", width: 80, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
         headerTooltip: "Effetto finanziario stimato per il 2025 in milioni di euro (negativo = minor gettito per l'erario)"},
-      {title: "2026",        field: "effetto_2026", width: 80, hozAlign: "right",
+      {title: "2026",        field: "effetto_y1", width: 80, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
         headerTooltip: "Effetto finanziario stimato per il 2026 in milioni di euro"},
-      {title: "2027",        field: "effetto_2027", width: 80, hozAlign: "right",
+      {title: "2027",        field: "effetto_y2", width: 80, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
         headerTooltip: "Effetto finanziario stimato per il 2027 in milioni di euro"},
@@ -539,7 +611,7 @@ fetch("measures.json").then(r => r.json()).then(data => {
     const agg = new Map();
     rows.forEach(d => {
       const key = d[field] || "(n/d)";
-      const v = d.effetto_2025;
+      const v = d.effetto_y0;  // first-year forecast
       if (typeof v !== "number") return;
       const prev = agg.get(key) || {sum: 0, n: 0};
       prev.sum += v; prev.n += 1;
@@ -551,10 +623,7 @@ fetch("measures.json").then(r => r.json()).then(data => {
       .slice(0, topN);
   };
 
-  // ---- Filter state (single source of truth for dashboard + text search) ----
-  const activeFilters = {};   // field -> selected value (one per field)
-  let governoMode = "governo";  // "governo" (istitutore) | "governo_ultimo"
-
+  // ---- Filter state ---- (activeFilters + governoMode are hoisted)
   const filterFieldsForSearch = ["descrizione", "norma", "beneficiari",
                                  "missione", "natura", "tributo_norm",
                                  "categoria", "tributo"];
@@ -675,10 +744,10 @@ fetch("measures.json").then(r => r.json()).then(data => {
     const rows = table.getRows("active");
     let sum = 0, n = 0;
     rows.forEach(r => {
-      const v = r.getData().effetto_2025;
+      const v = r.getData().effetto_y0;
       if (typeof v === "number") { sum += v; n++; }
     });
-    stats.textContent = `${rows.length} misure visibili · Σ effetto 2025 (quantificate, ${n}): ${fmtMlnAdaptive(sum)} €`;
+    stats.textContent = `${rows.length} misure visibili · Σ effetto ${currentYear + 1} (quantificate, ${n}): ${fmtMlnAdaptive(sum)} €`;
     refreshDashboard();
   };
   table.on("dataFiltered", updateStats);
@@ -717,7 +786,18 @@ fetch("measures.json").then(r => r.json()).then(data => {
 
   const search = document.getElementById("search");
   search.addEventListener("input", applyFilters);
-});
+
+  // Apply the calendar-year titles to the effetto columns once the table
+  // has been built. (initTable is called with the initial year's data;
+  // subsequent year changes re-set these via updateColumnDefinition.)
+  table.on("tableBuilt", () => {
+    table.updateColumnDefinition("effetto_y0", {title: String(currentYear + 1)});
+    table.updateColumnDefinition("effetto_y1", {title: String(currentYear + 2)});
+    table.updateColumnDefinition("effetto_y2", {title: String(currentYear + 3)});
+  });
+}
+
+bootstrap();
 
 // Caveats modal
 const caveatsModal = document.getElementById("caveats-modal");
