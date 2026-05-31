@@ -74,12 +74,22 @@ _INDEX = [g.inizio for g in GOVERNI]
 
 
 def lookup(data_iso: str | None) -> dict:
-    """Given a 'YYYY-MM-DD' string, return the governo in office on that date."""
+    """Given a 'YYYY-MM-DD' or 'YYYY' string, return the governo in office.
+
+    Year-only dates (from RSF abbreviated cites like 'L. 178/2020') are
+    treated as 1 January of that year. This is approximate when a
+    government change happened mid-year, but accurate for the bulk of
+    measures since most cites unambiguously sit inside one government's
+    tenure even at year granularity.
+    """
     if not data_iso:
         return {"governo": None, "coalizione": None}
     try:
-        d = date.fromisoformat(data_iso)
-    except ValueError:
+        if len(data_iso) == 4 and data_iso.isdigit():
+            d = date(int(data_iso), 1, 1)
+        else:
+            d = date.fromisoformat(data_iso)
+    except (ValueError, TypeError):
         return {"governo": None, "coalizione": None}
     idx = bisect_right(_INDEX, d) - 1
     if idx < 0:
