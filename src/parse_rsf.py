@@ -66,8 +66,17 @@ def cell_text(page, bbox) -> str:
     return " ".join(txt.split())
 
 
-def extract_row(page, trow) -> list[str]:
-    return [cell_text(page, c) for c in trow.cells]
+def extract_row(page, trow, prev_measure_row=None) -> list[str]:
+    """Extract one table row. When a cell bbox is None and the previous
+    measure row had a value there, inherit it -- this is how pdfplumber
+    represents PDF rowspans (one cell visually covering multiple rows)."""
+    out = []
+    for i, c in enumerate(trow.cells):
+        if c is None and prev_measure_row is not None and i < len(prev_measure_row):
+            out.append(prev_measure_row[i])
+        else:
+            out.append(cell_text(page, c))
+    return out
 
 
 def open_pdf(year: int):
@@ -100,6 +109,7 @@ def parse(year: int) -> list[dict]:
 
     rows_out: list[dict] = []
     missione = ""
+    prev_measure_row: list[str] | None = None
     with open_pdf(year) as pdf:
         for page_no in range(start, min(end, len(pdf.pages)) + 1):
             page = pdf.pages[page_no - 1]
@@ -107,7 +117,7 @@ def parse(year: int) -> list[dict]:
                 if len(tbl.rows[0].cells) < 12:
                     continue  # likely not the per-measure table
                 for trow in tbl.rows:
-                    row = extract_row(page, trow)
+                    row = extract_row(page, trow, prev_measure_row)
                     if not row:
                         continue
                     first = row[0]
@@ -131,6 +141,7 @@ def parse(year: int) -> list[dict]:
                         rec[col] = row[i] if i < len(row) else ""
                     rec["page"] = page_no
                     rows_out.append(rec)
+                    prev_measure_row = row
     return rows_out
 
 
