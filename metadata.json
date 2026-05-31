@@ -1,0 +1,37 @@
+{
+  "title": "Spese fiscali — Italia",
+  "description_html": "Searchable inventory of Italian tax expenditures. Source: <a href=\"https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf\">Rapporto annuale sulle spese fiscali 2024</a>, Tavola 1. Currently RSF 2024 only.",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "source": "MEF — Commissione per le spese fiscali",
+  "source_url": "https://www.mef.gov.it/ministero/commissioni/red_spe_fis/index.html",
+  "databases": {
+    "spesefiscali": {
+      "tables": {
+        "measures": {
+          "title": "Spese fiscali 2024 (575 misure)",
+          "description": "Each row is one tax expenditure measure as catalogued in RSF 2024 Tavola 1.",
+          "sort_desc": "effetto_2025",
+          "facets": ["missione", "tributo", "natura", "termine_vigenza", "vigore_5plus"],
+          "columns": {
+            "n": "Number in RSF 2024 Tavola 1",
+            "norma": "Norma di riferimento",
+            "descrizione": "Descrizione della misura",
+            "tributo": "Tributo (IRPEF, IVA, ACCISA, ...)",
+            "termine_vigenza": "Termine di vigenza (anno d'imposta o 'A REGIME')",
+            "natura": "Natura della misura (esenzione, deduzione, credito, ...)",
+            "effetto_2025": "Effetto finanziario 2025 (mln EUR, negativo = minor gettito)",
+            "effetto_2026": "Effetto finanziario 2026 (mln EUR)",
+            "effetto_2027": "Effetto finanziario 2027 (mln EUR)",
+            "effetto_2025_raw": "Effetto 2025 come da PDF (incl. 'Non quantificabile')",
+            "numero_frequenze": "Numero di beneficiari (frequenze)",
+            "effetto_procapite": "Effetto finanziario pro capite (EUR)",
+            "beneficiari": "Soggetti e categorie dei beneficiari",
+            "vigore_5plus": "In vigore da piu' di 5 anni",
+            "page": "Pagina nel PDF RSF 2024"
+          }
+        }
+      }
+    }
+  }
+}
