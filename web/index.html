@@ -329,9 +329,40 @@ const shortMissione = (s) => {
   return MISSIONE_SHORT[stripped] || sentenceCase(stripped);
 };
 
+// Pretty labels: applied at data-load so dashboard/table/filter values stay in sync.
+const TRIBUTO_PRETTY = {
+  "IRPEF": "IRPEF", "IRES": "IRES", "IRAP": "IRAP", "IVA": "IVA",
+  "IRPEF+IRES": "IRPEF+IRES", "IRPEF+IRES+IRAP": "IRPEF+IRES+IRAP",
+  "ACCISA": "Accisa", "REGISTRO_BOLLO": "Registro/Bollo/Ipocatastali",
+  "SUCCESSIONI": "Successioni", "SOSTITUTIVA": "Sostitutiva",
+  "CREDITO": "Credito d'imposta", "MISTO": "Misto", "ALTRO": "Altro",
+};
+const CATEGORIA_PRETTY = {
+  "DIRETTA": "Diretta", "INDIRETTA": "Indiretta",
+  "SOSTITUTIVA": "Sostitutiva", "CREDITO_IMPOSTA": "Credito d'imposta",
+  "MISTA": "Mista", "ALTRO": "Altro",
+};
+const prettyNatura = (s) => {
+  if (!s) return s;
+  // fix a PDF-extraction artifact in the source: "DED UZIONE" -> "DEDUZIONE"
+  s = s.replace(/DED\s+UZIONE/i, "DEDUZIONE");
+  // keep "credito d'imposta" naturally cased
+  if (/^CREDITO\s+D['’]IMPOSTA$/i.test(s)) return "Credito d'imposta";
+  return sentenceCase(s);
+};
+const prettyBeneficiari = (s) => {
+  if (!s) return s;
+  // light fixes for source orthography while we're here
+  return sentenceCase(s).replace(/societa'/i, "società").replace(/imponibilita'/i, "imponibilità");
+};
+
 fetch("measures.json").then(r => r.json()).then(data => {
   data.forEach(d => {
-    if (d.missione) d.missione = shortMissione(d.missione);
+    if (d.missione)     d.missione     = shortMissione(d.missione);
+    if (d.tributo_norm) d.tributo_norm = TRIBUTO_PRETTY[d.tributo_norm] || d.tributo_norm;
+    if (d.categoria)    d.categoria    = CATEGORIA_PRETTY[d.categoria]  || sentenceCase(d.categoria);
+    if (d.natura)       d.natura       = prettyNatura(d.natura);
+    if (d.beneficiari)  d.beneficiari  = prettyBeneficiari(d.beneficiari);
   });
   const table = new Tabulator("#table", {
     data,
@@ -391,7 +422,7 @@ fetch("measures.json").then(r => r.json()).then(data => {
         headerTooltip: "Effetto finanziario medio pro capite in euro, quando disponibile"},
       {title: ">5 anni",     field: "vigore_5plus", width: 80, headerFilter: "input", visible: false,
         headerTooltip: "Indica se la misura è in vigore da più di cinque anni (proxy di stratificazione storica)"},
-      {title: "p.",          field: "page", width: 50, hozAlign: "right",
+      {title: "Pagina",      field: "page", width: 70, hozAlign: "right",
         headerTooltip: "Pagina del PDF RSF 2024 in cui la misura compare (link diretto)",
         formatter: (cell) => {
           const v = cell.getValue();
