@@ -146,8 +146,31 @@ def parse_norma(s: str) -> Parsed:
     return Parsed()
 
 
+def parse_all(s: str) -> list[Parsed]:
+    """Return every full citation found in `s` (ignores TU references)."""
+    out: list[Parsed] = []
+    for m in CITE_RE.finditer(s or ""):
+        tipo = _norm_tipo(m.group("tipo"))
+        mese = MESI[m.group("mese").lower()]
+        giorno = m.group("giorno").zfill(2)
+        anno = m.group("anno")
+        out.append(Parsed(
+            tipo=tipo, data=f"{anno}-{mese}-{giorno}",
+            numero=m.group("num"), source="cite",
+        ))
+    return out
+
+
 def annotate(norma: str) -> dict:
     p = parse_norma(norma)
+    all_cites = parse_all(norma)
+    # Deduplicate (same date+numero) and pick the most recent.
+    seen = set(); uniq = []
+    for c in all_cites:
+        key = (c.data, c.numero, c.tipo)
+        if key in seen: continue
+        seen.add(key); uniq.append(c)
+    ultimo = max(uniq, key=lambda c: c.data) if uniq else None
     return {
         "norma_tipo": p.tipo,
         "norma_data": p.data,
@@ -157,6 +180,10 @@ def annotate(norma: str) -> dict:
         "norma_urn":  p.urn,
         "norma_url":  p.url,
         "norma_src":  p.source,
+        "norma_ultimo_data": ultimo.data if ultimo else p.data,
+        "norma_ultimo_urn":  ultimo.urn  if ultimo else None,
+        "norma_ultimo_url":  ultimo.url  if ultimo else None,
+        "norma_n_cites":     len(uniq),
     }
 
 

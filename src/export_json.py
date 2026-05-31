@@ -44,6 +44,9 @@ def main():
         d.update(annotate(d["norma"] or ""))
         d.update(normalize_tributo(d["tributo"] or ""))
         d.update(lookup_governo(d.get("norma_data")))
+        u = lookup_governo(d.get("norma_ultimo_data"))
+        d["governo_ultimo"]    = u["governo"]
+        d["coalizione_ultima"] = u["coalizione"]
         if d["n"] in cleaned:
             d["descrizione_raw"] = d["descrizione"]
             d["descrizione"] = cleaned[d["n"]]
