@@ -15,12 +15,32 @@ beneficiari, and whether it has been in force more than 5 years.
 ## Quick start
 
 ```bash
-make all      # download PDF, parse Tavola 1, load SQLite
-make serve    # Datasette on :8001
+make all      # download PDF, parse Tavola 1, load SQLite, emit measures.json
+make web      # static UI on :8000
+make serve    # alternative: Datasette on :8001
 ```
 
 Requires `pdfplumber` and `datasette` (install with
 `pip install --user pdfplumber datasette`).
+
+### Optional: clean up descrizione typos via Gemini 2.5 Flash on Vertex
+
+The RSF PDF occasionally drops inter-word spaces inside cells
+(`del50%`, `gliinterventi`). A one-shot pass through Gemini restores
+them. Output is character-invariant-verified (the model is only allowed
+to add or remove whitespace; any other change → reject and keep raw).
+
+```bash
+pip install --user -r requirements-cleanup.txt
+gcloud auth application-default login                # one-time
+export GOOGLE_CLOUD_PROJECT="your-project-id"
+export GOOGLE_CLOUD_LOCATION="us-central1"           # optional
+make clean-descr                                     # populates measures.json with cleaned text
+```
+
+Rejects (model-output failed the invariant twice) are logged to
+`data/processed/descrizioni_review.csv`; the raw original is kept for
+those rows. The cleaned CSV is cached, so reruns only process new rows.
 
 ## Pipeline
 

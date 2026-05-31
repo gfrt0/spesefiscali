@@ -5,8 +5,9 @@ CSV := data/processed/measures_2024.csv
 DB  := db/spesefiscali.db
 
 JSON := web/measures.json
+CLEAN_CSV := data/processed/descrizioni_clean.csv
 
-.PHONY: all fetch parse load export serve web clean
+.PHONY: all fetch parse load export serve web clean-descr clean
 
 all: $(DB) $(JSON)
 
@@ -29,6 +30,14 @@ $(DB): $(CSV) src/load_sqlite.py
 export: $(JSON)
 
 $(JSON): $(DB) src/export_json.py
+	$(PYTHON) src/export_json.py
+
+clean-descr: $(CLEAN_CSV)
+
+$(CLEAN_CSV): $(CSV) src/clean_descrizioni.py
+	@command -v gcloud >/dev/null || { echo "gcloud CLI not found"; exit 1; }
+	@[ -n "$$GOOGLE_CLOUD_PROJECT" ] || { echo "Set GOOGLE_CLOUD_PROJECT"; exit 1; }
+	$(PYTHON) src/clean_descrizioni.py
 	$(PYTHON) src/export_json.py
 
 serve: $(DB)
