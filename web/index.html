@@ -156,7 +156,7 @@
 <div class="sub">
   Le 575 misure catalogate nella Tavola 1 del
   <a href="https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf" target="_blank">RSF 2024</a>.
-  Cerca, filtra e ordina. Effetti finanziari in milioni di euro (negativo = minor gettito).
+  Cerca, filtra e ordina. Effetti finanziari in milioni (mln) o miliardi (mld) di euro; negativo = minor gettito.
 </div>
 
 <div class="pills empty" id="pills"></div>
@@ -180,12 +180,25 @@
 
 <script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
 <script>
-const fmtEUR = (cell) => {
-  const v = cell.getValue();
+// Format a value in *millions of EUR* with adaptive unit (mln / mld).
+// |v| >= 1000 mln (1 bn)   -> show as "X,Y mld"
+// |v| >= 1                 -> show as "X mln" (or "X,Y mln" if small)
+// 0 < |v| < 1              -> show as "<1 mln"
+const fmtMlnAdaptive = (v, opts = {}) => {
   if (v === null || v === undefined || v === "") return "";
-  const s = (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
-  return Number(s).toLocaleString("it-IT");
+  const a = Math.abs(v);
+  if (a >= 1000) {
+    return (v / 1000).toLocaleString("it-IT",
+      {minimumFractionDigits: 1, maximumFractionDigits: 1}) + " mld";
+  }
+  if (a >= 10) return v.toLocaleString("it-IT", {maximumFractionDigits: 0}) + " mln";
+  if (a >= 1)  return v.toLocaleString("it-IT", {maximumFractionDigits: 1}) + " mln";
+  if (a > 0)   return v.toLocaleString("it-IT", {maximumFractionDigits: 2}) + " mln";
+  return "0";
 };
+
+// Table-cell formatter: same logic, but used inside Tabulator
+const fmtEUR = (cell) => fmtMlnAdaptive(cell.getValue());
 const colorNeg = (cell) => {
   const v = cell.getValue();
   if (v !== null && v < 0) cell.getElement().classList.add("neg");
@@ -287,13 +300,13 @@ fetch("measures.json").then(r => r.json()).then(data => {
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Tipologia tecnica della misura: esenzione, deduzione, detrazione, credito d'imposta, riduzione d'aliquota, regime speciale, ..."},
-      {title: "2025",        field: "effetto_2025", width: 70, hozAlign: "right",
+      {title: "2025",        field: "effetto_2025", width: 90, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         headerTooltip: "Effetto finanziario stimato per il 2025 in milioni di euro (negativo = minor gettito per l'erario)"},
-      {title: "2026",        field: "effetto_2026", width: 70, hozAlign: "right",
+      {title: "2026",        field: "effetto_2026", width: 90, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         headerTooltip: "Effetto finanziario stimato per il 2026 in milioni di euro"},
-      {title: "2027",        field: "effetto_2027", width: 70, hozAlign: "right",
+      {title: "2027",        field: "effetto_2027", width: 90, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         headerTooltip: "Effetto finanziario stimato per il 2027 in milioni di euro"},
       {title: "Beneficiari", field: "beneficiari", width: 200, headerFilter: "input",
@@ -365,7 +378,7 @@ fetch("measures.json").then(r => r.json()).then(data => {
     root.innerHTML = items.map(it => {
       const pct = (it.abs / max * 100).toFixed(1);
       const lbl = (it.key.length > 38 ? it.key.slice(0, 36) + "…" : it.key);
-      const val = (it.sum).toLocaleString("it-IT", {maximumFractionDigits: 0});
+      const val = fmtMlnAdaptive(it.sum);
       const active = sel === it.key ? " active" : "";
       return `<div class="bar-row${active}" data-field="${field}" data-key="${it.key.replace(/"/g, "&quot;")}">
         <span class="lbl" title="${it.key} — ${it.n} misure">${lbl}</span>
@@ -437,7 +450,7 @@ fetch("measures.json").then(r => r.json()).then(data => {
       const v = r.getData().effetto_2025;
       if (typeof v === "number") { sum += v; n++; }
     });
-    stats.textContent = `${rows.length} misure visibili · Σ effetto 2025 (quantificate, ${n}): ${sum.toLocaleString("it-IT", {maximumFractionDigits: 0})} mln €`;
+    stats.textContent = `${rows.length} misure visibili · Σ effetto 2025 (quantificate, ${n}): ${fmtMlnAdaptive(sum)} €`;
     refreshDashboard();
   };
   table.on("dataFiltered", updateStats);
