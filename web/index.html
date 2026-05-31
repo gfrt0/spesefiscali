@@ -471,30 +471,8 @@ async function bootstrap() {
   currentYear = start;
   updateChrome(start, data.length);
   initTable(data);
-  sel.addEventListener("change", async (e) => {
-    const y = +e.target.value;
-    try {
-      const resp = await fetch(`measures_${y}.json`);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const d = prepData(await resp.json());
-      currentYear = y;
-      updateChrome(y, d.length);
-      Object.keys(activeFilters).forEach(k => delete activeFilters[k]);
-      const setColTitle = (field, title) => {
-        const col = table.getColumn(field);
-        if (col) col.updateDefinition({title});
-      };
-      setColTitle("effetto_y0", String(y + 1));
-      setColTitle("effetto_y1", String(y + 2));
-      setColTitle("effetto_y2", String(y + 3));
-      await table.replaceData(d);
-      refreshAll();
-      history.replaceState(null, "", `#year=${y}`);
-    } catch (err) {
-      console.error("[year selector] failed:", err);
-      alert("Errore nel cambio anno: " + err.message);
-    }
-  });
+  // The year-change handler is wired inside initTable() where refreshAll
+  // and the rest of the panel internals are in scope.
 }
 
 function updateChrome(year, count) {
@@ -812,8 +790,28 @@ function initTable(data) {
     setColTitle("effetto_y2", String(currentYear + 3));
   };
   table.on("tableBuilt", applyYearTitles);
-  // Also try once after a tick, in case tableBuilt already fired.
   setTimeout(applyYearTitles, 0);
+
+  // Year selector: refetch + re-render in place.
+  const sel = document.getElementById("year-selector");
+  sel.addEventListener("change", async (e) => {
+    const y = +e.target.value;
+    try {
+      const resp = await fetch(`measures_${y}.json`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const d = prepData(await resp.json());
+      currentYear = y;
+      updateChrome(y, d.length);
+      Object.keys(activeFilters).forEach(k => delete activeFilters[k]);
+      applyYearTitles();
+      await table.replaceData(d);
+      refreshAll();
+      history.replaceState(null, "", `#year=${y}`);
+    } catch (err) {
+      console.error("[year selector] failed:", err);
+      alert("Errore nel cambio anno: " + err.message);
+    }
+  });
 }
 
 bootstrap();
