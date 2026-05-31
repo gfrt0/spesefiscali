@@ -60,10 +60,29 @@ MISSIONE_RE = re.compile(r"^MISSIONE\s+(\d+):\s*(.+)$", re.IGNORECASE)
 
 
 def cell_text(page, bbox) -> str:
+    """Extract a table cell's text.
+
+    Some rotated/garbled cells (e.g. RSF 2019 page 90 measure 161) cause
+    `extract_text` to emit one character per line. `extract_words` is
+    immune to this because it groups glyphs by position before assembling
+    them. We use it, sort by (top, x0), and join.
+    """
     if bbox is None:
         return ""
-    txt = page.crop(bbox).extract_text(x_tolerance=1) or ""
-    return " ".join(txt.split())
+    crop = page.crop(bbox)
+    words = crop.extract_words(x_tolerance=1, y_tolerance=2)
+    if not words:
+        return ""
+    words.sort(key=lambda w: (round(w["top"], 1), w["x0"]))
+    lines: list[list[str]] = []
+    last_top = None
+    for w in words:
+        top = round(w["top"], 1)
+        if last_top is None or abs(top - last_top) > 3:
+            lines.append([])
+        lines[-1].append(w["text"])
+        last_top = top
+    return " ".join(" ".join(line) for line in lines)
 
 
 def extract_row(page, trow, prev_measure_row=None) -> list[str]:
