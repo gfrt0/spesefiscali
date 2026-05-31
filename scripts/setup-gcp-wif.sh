@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-your-gcp-project-id}"
+PROJECT_ID="${PROJECT_ID:?set PROJECT_ID=your-gcp-project-id}"
 LOCATION="${LOCATION:-us-central1}"
 POOL_ID="${POOL_ID:-github-pool}"
 PROVIDER_ID="${PROVIDER_ID:-github-provider}"

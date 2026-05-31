@@ -53,7 +53,7 @@ any other change → reject and keep the original.
 pip install -r requirements-cleanup.txt
 gcloud auth application-default login                # one-time
 export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
-export GOOGLE_CLOUD_LOCATION="us-central1"           # optional
+export GOOGLE_CLOUD_LOCATION="us-central1"           # any Vertex AI region
 make clean-descr
 ```
 
@@ -78,7 +78,7 @@ authenticated via WIF (no service-account keys).
    and `roles/iam.serviceAccountAdmin` on the GCP project):
 
    ```bash
-   PROJECT_ID=your-gcp-project-id \
+   PROJECT_ID=<your-gcp-project-id> \
    GH_REPO=<your-gh-org-or-user>/spesefiscali \
      bash scripts/setup-gcp-wif.sh
    ```
