@@ -29,10 +29,24 @@
   }
   .dash {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 12px;
     margin-bottom: 14px;
   }
+  .coal {
+    display: inline-block; width: 9px; height: 9px;
+    border-radius: 50%; margin-right: 6px;
+    vertical-align: -1px;
+  }
+  .coal-centrodestra    { background: #2e6fdb; }
+  .coal-centrosinistra  { background: #c0392b; }
+  .coal-larghe-intese   { background: #6f3aa1; }
+  .coal-unita-nazionale { background: #555; }
+  .coal-tecnico         { background: #888; }
+  .coal-giallo-verde    { background: linear-gradient(135deg, #e6c200 50%, #2a8c3a 50%); }
+  .coal-giallo-rosso    { background: linear-gradient(135deg, #e6c200 50%, #c0392b 50%); }
+  .coal-dc-pentapartito { background: #f49b1c; }
+  .coal-altro           { background: #cbd0d6; }
   .panel {
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -216,6 +230,9 @@
     <h3>Categoria fiscale = scelta di design</h3>
     <p>La colonna <em>Categoria</em> aggrega DIRETTA / INDIRETTA / SOSTITUTIVA / CREDITO_IMPOSTA / MISTA / ALTRO. In particolare, <strong>CREDITO_IMPOSTA</strong> è tenuto separato dalle dirette pur essendo, di fatto, un meccanismo di erogazione che opera tipicamente su IRPEF/IRES. È una scelta di chi ha costruito il database, non una distinzione presente nella legge.</p>
 
+    <h3>Governo istitutore</h3>
+    <p>La colonna <em>Governo</em> indica l’esecutivo in carica alla <strong>data della norma istitutiva</strong> (prima citazione utile, come riportata dall’RSF). È un’attribuzione di paternità della misura, non un voto: molte spese fiscali sono nate in un disegno di legge governativo, ma altrettante sono state introdotte da emendamenti parlamentari (anche di opposizione) approvati con voto di fiducia su un maxi-emendamento alla Legge di Bilancio. Inoltre, una larga quota delle misure è stata in seguito modificata, prorogata o ampliata da governi successivi: questa colonna non lo cattura.</p>
+
     <h3>Pro capite — segno normalizzato</h3>
     <p>In 6 misure su 127 con valore non vuoto, l’RSF 2024 riporta nella colonna <em>Effetto pro capite</em> il modulo (valore assoluto) mentre i totali macro (2025/2026/2027) sono firmati negativi. Verificato che reported<sub>i</sub>&nbsp;=&nbsp;|effetto<sub>i</sub>/frequenze<sub>i</sub>| nelle 6 anomalie, abbiamo allineato il segno del pro capite a quello del totale, così che tutte le righe rispettino la convenzione «negativo = minor gettito per l’erario».</p>
 
@@ -238,6 +255,7 @@
 <div class="dash">
   <div class="panel" id="panel-missione"><h3>Per missione (top 8)</h3><div class="rows"></div></div>
   <div class="panel" id="panel-categoria"><h3>Per categoria fiscale</h3><div class="rows"></div></div>
+  <div class="panel" id="panel-governo"><h3>Per governo istitutore (top 8)</h3><div class="rows"></div></div>
   <div class="panel" id="panel-natura"><h3>Per natura (top 8)</h3><div class="rows"></div></div>
 </div>
 
@@ -422,6 +440,16 @@ fetch("measures.json").then(r => r.json()).then(data => {
         headerTooltip: "Etichetta originale del tributo come riportata in RSF 2024 (prima della normalizzazione)"},
       {title: "Vigenza",     field: "termine_vigenza", width: 80, headerFilter: "input",
         headerTooltip: "Termine di vigenza della misura: ultimo anno d'imposta in cui si applica, oppure 'A REGIME' se permanente"},
+      {title: "Governo",     field: "governo", width: 130,
+        headerFilter: "list",
+        headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
+        formatter: (cell) => {
+          const v = cell.getValue(); if (!v) return "";
+          const d = cell.getRow().getData();
+          const coal = d.coalizione || "altro";
+          return `<span class="coal coal-${coal}" title="${coal}"></span>${v}`;
+        },
+        headerTooltip: "Governo in carica alla data della norma istitutiva (prima citazione). Indicativo: molte misure sono state poi modificate da governi successivi."},
       {title: "Natura",      field: "natura", width: 150,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
@@ -543,12 +571,13 @@ fetch("measures.json").then(r => r.json()).then(data => {
     const data = table.getRows("active").map(r => r.getData());
     renderPanel("panel-missione",  "missione",  aggregate(data, "missione"));
     renderPanel("panel-categoria", "categoria", aggregate(data, "categoria", 10));
+    renderPanel("panel-governo",   "governo",   aggregate(data, "governo"));
     renderPanel("panel-natura",    "natura",    aggregate(data, "natura"));
   };
 
   const FIELD_LABELS = {
     missione: "Missione", categoria: "Categoria", natura: "Natura",
-    tributo_norm: "Tributo",
+    tributo_norm: "Tributo", governo: "Governo",
   };
   const renderPills = () => {
     const root = document.getElementById("pills");

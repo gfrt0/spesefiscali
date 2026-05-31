@@ -8,6 +8,7 @@ from pathlib import Path
 
 from normattiva import annotate
 from tributi import normalize as normalize_tributo
+from governi import lookup as lookup_governo
 
 ROOT = Path(__file__).resolve().parent.parent
 DB = ROOT / "db" / "spesefiscali.db"
@@ -42,6 +43,7 @@ def main():
         d = dict(r)
         d.update(annotate(d["norma"] or ""))
         d.update(normalize_tributo(d["tributo"] or ""))
+        d.update(lookup_governo(d.get("norma_data")))
         if d["n"] in cleaned:
             d["descrizione_raw"] = d["descrizione"]
             d["descrizione"] = cleaned[d["n"]]
