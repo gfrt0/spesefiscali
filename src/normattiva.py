@@ -282,8 +282,35 @@ def fallback_url(s: str) -> str | None:
     return None
 
 
+_DATE_CACHE: dict[str, str] | None = None
+
+
+def _load_date_cache() -> dict[str, str]:
+    """Lazy-load the year-only URN -> publication-date cache built by
+    src/fetch_normattiva_dates.py. Returns an empty dict if missing."""
+    global _DATE_CACHE
+    if _DATE_CACHE is not None:
+        return _DATE_CACHE
+    import csv as _csv
+    from pathlib import Path as _Path
+    p = _Path(__file__).resolve().parent.parent / "data" / "processed" / "normattiva_dates.csv"
+    if not p.exists():
+        _DATE_CACHE = {}
+        return _DATE_CACHE
+    with p.open(encoding="utf-8") as f:
+        _DATE_CACHE = {r["urn"]: r["data_pubblicazione"] for r in _csv.DictReader(f)}
+    return _DATE_CACHE
+
+
 def annotate(norma: str) -> dict:
     p = parse_norma(norma)
+    # Upgrade year-only date with the cached Gazzetta publication date.
+    if p.tipo and p.data and len(p.data) == 4 and p.numero:
+        base = f"urn:nir:stato:{p.tipo}:{p.data};{p.numero}"
+        real = _load_date_cache().get(base)
+        if real:
+            p = Parsed(tipo=p.tipo, data=real, numero=p.numero,
+                       articolo=p.articolo, comma=p.comma, source=p.source)
     all_cites = parse_all(norma)
     # Deduplicate (same date+numero) and pick the most recent.
     seen = set(); uniq = []

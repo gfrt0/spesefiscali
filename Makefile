@@ -20,7 +20,7 @@ JSON      := web/measures.json
 PANEL     := web/panel.json
 CLEAN_CSV := data/processed/descrizioni_clean.csv
 
-.PHONY: all fetch parse load export serve web clean-descr clean
+.PHONY: all fetch fetch-dates parse load export serve web clean-descr clean
 
 all: $(DB) $(JSON)
 
@@ -45,6 +45,9 @@ export: $(JSON)
 
 $(JSON): $(DB) src/export_json.py src/normattiva.py src/tributi.py src/governi.py
 	$(PYTHON) src/export_json.py
+
+fetch-dates:
+	$(PYTHON) src/fetch_normattiva_dates.py
 
 clean-descr: $(CLEAN_CSV)
 
