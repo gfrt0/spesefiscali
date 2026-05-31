@@ -216,6 +216,9 @@
     <h3>Categoria fiscale = scelta di design</h3>
     <p>La colonna <em>Categoria</em> aggrega DIRETTA / INDIRETTA / SOSTITUTIVA / CREDITO_IMPOSTA / MISTA / ALTRO. In particolare, <strong>CREDITO_IMPOSTA</strong> è tenuto separato dalle dirette pur essendo, di fatto, un meccanismo di erogazione che opera tipicamente su IRPEF/IRES. È una scelta di chi ha costruito il database, non una distinzione presente nella legge.</p>
 
+    <h3>Pro capite — segno normalizzato</h3>
+    <p>In 6 misure su 127 con valore non vuoto, l’RSF 2024 riporta nella colonna <em>Effetto pro capite</em> il modulo (valore assoluto) mentre i totali macro (2025/2026/2027) sono firmati negativi. Verificato che reported<sub>i</sub>&nbsp;=&nbsp;|effetto<sub>i</sub>/frequenze<sub>i</sub>| nelle 6 anomalie, abbiamo allineato il segno del pro capite a quello del totale, così che tutte le righe rispettino la convenzione «negativo = minor gettito per l’erario».</p>
+
     <h3>Residui di estrazione PDF</h3>
     <p>Le descrizioni sono state estratte dal PDF originale, ripulite da spaziature mancanti tramite Gemini 2.5 Flash con un controllo di invariante carattere-per-carattere (il modello può solo aggiungere/togliere spazi, mai modificare lettere). 573/575 misure sono state pulite; 2 conservano refusi della fonte originaria.</p>
 
@@ -374,6 +377,16 @@ fetch("measures.json").then(r => r.json()).then(data => {
     if (d.beneficiari)  d.beneficiari  = prettyBeneficiari(d.beneficiari);
     d.numero_frequenze  = parseIT(d.numero_frequenze);
     d.effetto_procapite = parseIT(d.effetto_procapite);
+    // Normalize pro capite sign: in 6/127 rows the RSF reports the
+    // magnitude while the macro totals are signed. Force the per-capita
+    // to share the sign of the 2025 total when they disagree.
+    if (d.effetto_procapite !== null
+        && typeof d.effetto_2025 === "number"
+        && d.effetto_2025 !== 0
+        && d.effetto_procapite !== 0
+        && Math.sign(d.effetto_procapite) !== Math.sign(d.effetto_2025)) {
+      d.effetto_procapite = -d.effetto_procapite;
+    }
   });
   const table = new Tabulator("#table", {
     data,
