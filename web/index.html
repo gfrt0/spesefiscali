@@ -332,16 +332,21 @@ const colorNeg = (cell) => {
   return fmtEUR(cell);
 };
 
-// Normattiva linker: use pre-parsed norma_url if available, else fall back
-// to a Google site-search of normattiva.it. About 99.7% of measures resolve.
+// Norma linker. Three resolution paths:
+//   * Normattiva URN (most rows)              -> full colour link
+//   * Fallback URL (OPCM, Vienna, accordi)    -> grey link to GU / UN / Farnesina
+//   * Otherwise                                -> grey Google-search-on-normattiva fallback
 const normaLink = (cell) => {
   const v = cell.getValue();
   if (!v) return "";
   const d = cell.getRow().getData();
+  const isNormattiva = d.norma_src && d.norma_src !== "fallback";
   const url = d.norma_url
     || ("https://www.google.com/search?q=" + encodeURIComponent("site:normattiva.it " + v));
-  const cls = d.norma_url ? "" : ' style="color:#888"';
-  return `<a href="${url}" target="_blank"${cls}>${v}</a>`;
+  const cls = isNormattiva ? "" : ' style="color:#888"';
+  const title = isNormattiva ? "Normattiva (testo consolidato)"
+                             : "Documento esterno (es. Gazzetta Ufficiale, ONU)";
+  return `<a href="${url}" target="_blank" title="${title}"${cls}>${v}</a>`;
 };
 
 // Short labels for missioni whose official names are awkwardly long.

@@ -256,6 +256,32 @@ def parse_all(s: str) -> list[Parsed]:
     return out
 
 
+def fallback_url(s: str) -> str | None:
+    """Best-effort link for citations that don't resolve to a Normattiva URN.
+
+    OPCM / Ordinanze P.C.M. -> Gazzetta Ufficiale search.
+    Vienna Conventions      -> UN Treaty Collection page (diplomatic/consular).
+    Accordi internazionali  -> Farnesina diplomatic-archive landing page.
+    """
+    if not s:
+        return None
+    low = s.lower()
+    if "opcm" in low or re.search(r"ordinanza\s*p\.?\s*c\.?\s*m", low):
+        # Push the whole cite to GU's search; usually the first hit is correct.
+        return "https://www.gazzettaufficiale.it/ricerca/atto/serie_generale?reset=true&searchString=" \
+               + quote(s, safe="")
+    if "vienna" in low and "convenzion" in low:
+        if "diplomati" in low and "consolari" not in low.split("diplomati")[0]:
+            # Generic phrasing covering both -> point to diplomatic.
+            return "https://treaties.un.org/pages/ViewDetails.aspx?src=TREATY&mtdsg_no=III-3&chapter=3"
+        if "consolari" in low:
+            return "https://treaties.un.org/pages/ViewDetails.aspx?src=TREATY&mtdsg_no=III-6&chapter=3"
+        return "https://treaties.un.org/Pages/Treaties.aspx?id=3&subid=A"
+    if "accordi internazionali" in low or "accordi di sede" in low:
+        return "https://www.esteri.it/it/politica-estera-e-cooperazione-allo-sviluppo/politica_europea/"
+    return None
+
+
 def annotate(norma: str) -> dict:
     p = parse_norma(norma)
     all_cites = parse_all(norma)
@@ -273,8 +299,8 @@ def annotate(norma: str) -> dict:
         "norma_art":  p.articolo,
         "norma_com":  p.comma,
         "norma_urn":  p.urn,
-        "norma_url":  p.url,
-        "norma_src":  p.source,
+        "norma_url":  p.url or fallback_url(norma),
+        "norma_src":  p.source if p.urn else ("fallback" if fallback_url(norma) else p.source),
         "norma_ultimo_data": ultimo.data if ultimo else p.data,
         "norma_ultimo_urn":  ultimo.urn  if ultimo else None,
         "norma_ultimo_url":  ultimo.url  if ultimo else None,
