@@ -46,11 +46,12 @@
   }
   .bar-row {
     display: grid;
-    grid-template-columns: 1fr 70px;
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 8px;
     align-items: center;
-    margin: 2px 0;
+    margin: 3px 0;
     font-size: 12px;
+    line-height: 16px;
   }
   .bar-row .lbl {
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -58,7 +59,7 @@
   }
   .bar-row .lbl:hover { color: #0a58ca; text-decoration: underline; }
   .bar-row .bar-cell {
-    position: relative; height: 14px; background: #f0e6e6; border-radius: 2px;
+    position: relative; height: 16px; background: #f0e6e6; border-radius: 2px;
     overflow: hidden;
   }
   .bar-row .bar-fill {
@@ -67,10 +68,14 @@
     opacity: .75;
   }
   .bar-row .val {
-    font-variant-numeric: tabular-nums; text-align: right;
-    color: var(--fg); font-size: 11px;
+    position: absolute; right: 5px; top: 0; bottom: 0;
+    display: flex; align-items: center;
+    font-variant-numeric: tabular-nums;
+    color: #fff; font-size: 11px;
+    text-shadow: 0 0 2px rgba(0,0,0,.4);
+    white-space: nowrap;
+    pointer-events: none;
   }
-  .bar-row.active .lbl { font-weight: 600; }
   #search {
     flex: 1; min-width: 240px;
     padding: 8px 10px; font-size: 14px;
@@ -242,8 +247,10 @@ fetch("measures.json").then(r => r.json()).then(data => {
       const val = (it.sum).toLocaleString("it-IT", {maximumFractionDigits: 0});
       return `<div class="bar-row" data-field="${field}" data-key="${it.key.replace(/"/g, "&quot;")}">
         <span class="lbl" title="${it.key} — ${it.n} misure">${lbl}</span>
-        <div class="bar-cell"><div class="bar-fill" style="width:${pct}%"></div></div>
-        <span class="val">${val}</span>
+        <div class="bar-cell">
+          <div class="bar-fill" style="width:${pct}%"></div>
+          <span class="val">${val}</span>
+        </div>
       </div>`;
     }).join("");
   };
