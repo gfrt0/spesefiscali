@@ -105,7 +105,7 @@ def call_gemini(client, text: str, *, strict: bool = False) -> str:
         response_mime_type="application/json",
         response_schema=CleanedText,
         temperature=0.0,
-        max_output_tokens=2048,
+        max_output_tokens=8192,
     )
     resp = client.models.generate_content(model=MODEL, contents=prompt, config=cfg)
     parsed = CleanedText.model_validate_json(resp.text)
@@ -154,6 +154,8 @@ def main(argv=None):
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--limit", type=int, default=None, help="cap rows for a test run")
     ap.add_argument("--force", action="store_true", help="ignore cache")
+    ap.add_argument("--retry-rejects", action="store_true",
+                    help="reprocess only rows present in descrizioni_review.csv")
     args = ap.parse_args(argv)
 
     rows = []
@@ -164,6 +166,12 @@ def main(argv=None):
         rows = rows[: args.limit]
 
     cache = {} if args.force else load_cache(OUT_CSV)
+    if args.retry_rejects and REVIEW_CSV.exists():
+        with REVIEW_CSV.open(encoding="utf-8") as f:
+            retry_ns = {int(r["n"]) for r in csv.DictReader(f)}
+        for n in retry_ns:
+            cache.pop(n, None)
+        print(f"--retry-rejects: re-processing {len(retry_ns)} previously rejected rows")
     todo = [(n, t) for n, t in rows if n not in cache]
     print(f"{len(rows)} total | {len(cache)} cached | {len(todo)} to process")
 
@@ -198,12 +206,12 @@ def main(argv=None):
         for n in sorted(cleaned_map):
             w.writerow([n, cleaned_map[n]])
 
-    if rejects:
-        with REVIEW_CSV.open("w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow(["n", "note", "orig", "model_output"])
-            for r in rejects:
-                w.writerow([r.n, r.note, r.orig, r.cleaned])
+    # Always rewrite review CSV so stale rejects don't accumulate across runs.
+    with REVIEW_CSV.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["n", "note", "orig", "model_output"])
+        for r in rejects:
+            w.writerow([r.n, r.note, r.orig, r.cleaned])
 
     from collections import Counter
     c = Counter(r.status for r in results)
