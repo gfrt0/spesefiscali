@@ -18,7 +18,7 @@ PDF_URL_2024 := https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/
 DB        := db/spesefiscali.db
 JSON      := web/measures.json
 PANEL     := web/panel.json
-CLEAN_CSV := data/processed/descrizioni_clean.csv
+CLEAN_CSVS := $(addprefix data/processed/descrizioni_clean_,$(addsuffix .csv,$(YEARS)))
 
 .PHONY: all fetch fetch-dates parse load export serve web clean-descr clean
 
@@ -49,12 +49,12 @@ $(JSON): $(DB) src/export_json.py src/normattiva.py src/tributi.py src/governi.p
 fetch-dates:
 	$(PYTHON) src/fetch_normattiva_dates.py
 
-clean-descr: $(CLEAN_CSV)
+clean-descr: $(CLEAN_CSVS)
 
-$(CLEAN_CSV): data/processed/measures_2024.csv src/clean_descrizioni.py
+data/processed/descrizioni_clean_%.csv: data/processed/measures_%.csv src/clean_descrizioni.py
 	@command -v gcloud >/dev/null || { echo "gcloud CLI not found"; exit 1; }
 	@[ -n "$$GOOGLE_CLOUD_PROJECT" ] || { echo "Set GOOGLE_CLOUD_PROJECT"; exit 1; }
-	$(PYTHON) src/clean_descrizioni.py
+	$(PYTHON) src/clean_descrizioni.py --year $*
 	$(PYTHON) src/export_json.py
 
 serve: $(DB)

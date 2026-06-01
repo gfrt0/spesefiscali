@@ -14,24 +14,27 @@
   }
   * { box-sizing: border-box; }
   body {
-    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     color: var(--fg);
     margin: 0;
-    padding: 16px 20px 32px;
+    padding: 10px 14px 12px;
     max-width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
   }
   h1 { font-size: 18px; margin: 0 0 4px; }
   .sub { color: var(--muted); margin-bottom: 12px; font-size: 13px; }
   .sub a { color: var(--muted); }
   .controls {
-    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
-    margin-bottom: 10px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 6px;
   }
   .dash {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: 10px;
+    margin-bottom: 8px;
   }
   .coal {
     display: inline-block; width: 9px; height: 9px;
@@ -50,9 +53,9 @@
   .panel {
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 8px 10px;
+    padding: 6px 9px 7px;
     background: #fafafa;
-    min-height: 180px;
+    min-height: 0;
   }
   .panel h3 {
     font-size: 12px; font-weight: 600; margin: 0 0 6px;
@@ -162,7 +165,7 @@
   .neg { color: var(--neg); font-variant-numeric: tabular-nums; text-align: right; }
   .num { font-variant-numeric: tabular-nums; text-align: right; }
   .descr { white-space: normal; }
-  #table { font-size: 13px; }
+  #table { font-size: 13px; flex: 1; min-height: 240px; }
   .tabulator { border: 1px solid var(--border); }
   .tabulator .tabulator-header .tabulator-col {
     background: #f5f5f5;
@@ -170,8 +173,8 @@
   a { color: #0a58ca; text-decoration: none; }
   a:hover { text-decoration: underline; }
   .topbar {
-    display: flex; justify-content: space-between; align-items: flex-start;
-    gap: 16px; margin-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 16px; margin-bottom: 8px;
   }
   .topbar .right {
     display: flex; gap: 14px; align-items: center;
@@ -188,10 +191,12 @@
   .year-pick:disabled { cursor: default; opacity: .8; }
   .year-pick.current { background: #fef7e0; border-color: #d6a000; font-weight: 600; }
   .footer {
-    margin-top: 16px;
+    margin-top: 8px;
     font-size: 12px; color: var(--muted);
     text-align: center;
   }
+  .footer a { color: var(--muted); }
+  .footer a:hover { color: #0a58ca; }
   .modal-backdrop {
     display: none;
     position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
@@ -216,16 +221,9 @@
 <body>
 
 <div class="topbar">
-  <div>
-    <h1>Spese fiscali italiane — <span id="title-year">RSF 2024</span></h1>
-    <div class="sub">
-      Cerca, filtra e ordina le <span id="sub-count">575</span> misure
-      catalogate nella Tavola 1 del
-      <a id="sub-rsf-link" href="#" target="_blank">Rapporto annuale sulle spese fiscali</a>
-      (<select id="year-selector" class="year-pick" aria-label="anno RSF"></select>).
-    </div>
-  </div>
+  <h1>Spese fiscali italiane — <span id="title-year">RSF 2024</span></h1>
   <div class="right">
+    <select id="year-selector" class="year-pick" aria-label="anno RSF"></select>
     <a href="#" id="caveats-link">ⓘ Limiti e cautele</a>
     <a href="https://github.com/gfrt0/spesefiscali" target="_blank">GitHub</a>
   </div>
@@ -286,8 +284,8 @@
   <div class="panel" id="panel-categoria"><h3>Per categoria fiscale</h3><div class="rows"></div></div>
   <div class="panel" id="panel-governo">
     <h3>
-      <span id="panel-governo-title">Per governo istitutore (top 8)</span>
-      <span class="panel-toggle" id="panel-governo-toggle" title="alterna fra primo e ultimo intervento">↻ ultimo intervento</span>
+      <span id="panel-governo-title">Per ultimo intervento (top 8)</span>
+      <span class="panel-toggle on" id="panel-governo-toggle" title="alterna fra primo e ultimo intervento">↻ governo istitutore</span>
     </h3>
     <div class="rows"></div>
   </div>
@@ -301,6 +299,7 @@
     <button class="cols-btn" id="cols-btn">Colonne ▾</button>
     <div class="cols-menu" id="cols-menu"></div>
   </div>
+  <button class="cols-btn" id="export-csv-btn" title="Scarica la vista corrente (filtri e ordinamento applicati) come CSV">⇩ CSV</button>
 </div>
 
 <div id="table"></div>
@@ -530,44 +529,60 @@ function updateChrome(year, count) {
 
 let table = null;
 let activeFilters = {};
-let governoMode = "governo";
+let governoMode = "governo_ultimo";
 
 function initTable(data) {
   table = new Tabulator("#table", {
     data,
-    layout: "fitDataStretch",
-    height: "calc(100vh - 160px)",
+    layout: "fitColumns",
+    height: "100%",
     pagination: false,
     headerFilterLiveFilterDelay: 200,
     initialSort: [{column: "effetto_y0", dir: "asc"}],
     columns: [
-      {title: "N.",          field: "n", width: 45, headerFilter: false, hozAlign: "right",
+      {title: "N.",          field: "n", width: 42, headerFilter: false, hozAlign: "right",
         headerTooltip: "Numero d'ordine nella Tavola 1 dell'RSF 2024"},
-      {title: "Missione",    field: "missione", width: 160,
+      {title: "Missione",    field: "missione", width: 120, minWidth: 90,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Missione di spesa cui la misura è associata nel bilancio dello Stato (etichetta abbreviata; il dato grezzo è la denominazione ufficiale RSF)"},
-      {title: "Norma",       field: "norma", width: 230, headerFilter: "input",
+      {title: "Norma",       field: "norma", width: 115, minWidth: 80, headerFilter: "input",
         formatter: normaLink,
         headerTooltip: "Norma di riferimento (atto istitutivo della spesa fiscale). Il link rimanda al testo consolidato su Normattiva quando risolvibile"},
-      {title: "Descrizione", field: "descrizione", widthGrow: 2, minWidth: 220,
+      {title: "Descrizione", field: "descrizione", widthGrow: 1.2, minWidth: 140,
         headerFilter: "input",
         formatter: "textarea",
         cssClass: "descr",
         headerTooltip: "Descrizione sintetica della misura come riportata in RSF 2024"},
-      {title: "Tributo",     field: "tributo_norm", width: 95,
+      {title: "Tributo",     field: "tributo_norm", width: 80, minWidth: 70,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Tributo normalizzato. Combo come IRPEF+IRES indicano misure che operano su più tributi. CREDITO è una forma di erogazione (credito d'imposta)"},
-      {title: "Categoria",   field: "categoria", width: 115,
+      {title: "Categoria",   field: "categoria", width: 85, minWidth: 72,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Categoria fiscale: DIRETTA (IRPEF, IRES, IRAP), INDIRETTA (IVA, accisa, registro/bollo, successioni), SOSTITUTIVA, CREDITO_IMPOSTA, MISTA, ALTRO"},
       {title: "Tributo (raw)", field: "tributo", width: 180, headerFilter: "input", visible: false,
         headerTooltip: "Etichetta originale del tributo come riportata in RSF 2024 (prima della normalizzazione)"},
-      {title: "Vigenza",     field: "termine_vigenza", width: 80, headerFilter: "input",
-        headerTooltip: "Termine di vigenza della misura: ultimo anno d'imposta in cui si applica, oppure 'A REGIME' se permanente"},
-      {title: "Governo (ist.)", field: "governo", width: 130,
+      {title: "Vigenza",     field: "vigenza_label", width: 80, minWidth: 64,
+        headerFilter: "list",
+        headerFilterParams: {
+          values: {"":"(tutti)", "regime":"A regime", "conditional_regime":"A regime cond.",
+                   "terminal_year":"Anno terminale", "altro":"Altro"},
+          clearable: true,
+        },
+        headerFilterFunc: (sel, _v, row) => !sel || row.vigenza_kind === sel,
+        // Sort: regime variants float to bottom of ascending sort (they're open-ended).
+        sorter: (a, b, aRow, bRow) => {
+          const ay = aRow.getData().vigenza_year, by = bRow.getData().vigenza_year;
+          if (ay == null && by == null) return 0;
+          if (ay == null) return 1;
+          if (by == null) return -1;
+          return ay - by;
+        },
+        tooltip: (e, cell) => cell.getRow().getData().termine_vigenza || "",
+        headerTooltip: "Termine di vigenza: ultimo anno d'imposta in cui la misura si applica, oppure 'A regime' se permanente. Hover su una cella per il testo grezzo dell'RSF."},
+      {title: "Governo (ist.)", field: "governo", width: 94, minWidth: 82, visible: false,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         formatter: (cell) => {
@@ -576,7 +591,7 @@ function initTable(data) {
           return `<span class="coal coal-${coal}" title="${coal}"></span>${v}`;
         },
         headerTooltip: "Governo in carica alla data della norma istitutiva (prima citazione)."},
-      {title: "Governo (ult.)", field: "governo_ultimo", width: 130, visible: false,
+      {title: "Governo (ult.)", field: "governo_ultimo", width: 94, minWidth: 82,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         formatter: (cell) => {
@@ -588,7 +603,7 @@ function initTable(data) {
       {title: "# interventi", field: "norma_n_cites", width: 95, hozAlign: "right",
         sorter: "number", visible: false,
         headerTooltip: "Numero di norme citate nel campo 'norma di riferimento' (atto istitutivo + modifiche + proroghe + estensioni)."},
-      {title: "Natura",      field: "natura", width: 150,
+      {title: "Natura",      field: "natura", width: 115, minWidth: 95,
         headerFilter: "list",
         headerFilterParams: {valuesLookup: true, autocomplete: true, allowEmpty: true, clearable: true},
         headerTooltip: "Tipologia tecnica della misura: esenzione, deduzione, detrazione, credito d'imposta, riduzione d'aliquota, regime speciale, ..."},
@@ -601,19 +616,19 @@ function initTable(data) {
       //   formatter: (cell) => sparkline(cell.getValue()),
       //   tooltip: sparklineTooltip,
       //   headerTooltip: "Andamento di Effetto T+1 attraverso le 9 edizioni RSF (2016-2024) per la stessa misura. Punto giallo: anno selezionato."},
-      {title: "T+1",         field: "effetto_y0", width: 80, hozAlign: "right",
+      {title: "T+1",         field: "effetto_y0", width: 68, minWidth: 58, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
         headerTooltip: () => `Effetto finanziario stimato per l'anno ${currentYear + 1} in mln EUR (negativo = minor gettito)`},
-      {title: "T+2",         field: "effetto_y1", width: 80, hozAlign: "right",
+      {title: "T+2",         field: "effetto_y1", width: 68, minWidth: 58, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
         headerTooltip: () => `Effetto finanziario stimato per l'anno ${currentYear + 2} in mln EUR`},
-      {title: "T+3",         field: "effetto_y2", width: 80, hozAlign: "right",
+      {title: "T+3",         field: "effetto_y2", width: 68, minWidth: 58, hozAlign: "right",
         formatter: colorNeg, sorter: "number",
         sorterParams: {alignEmptyValues: "bottom"},
         headerTooltip: () => `Effetto finanziario stimato per l'anno ${currentYear + 3} in mln EUR`},
-      {title: "Beneficiari", field: "beneficiari", width: 200, headerFilter: "input",
+      {title: "Beneficiari", field: "beneficiari", width: 130, minWidth: 90, widthGrow: 1.4, headerFilter: "input",
         headerTooltip: "Soggetti e categorie dei beneficiari (persone fisiche, imprese, particolari categorie, ...)"},
       {title: "Frequenze",   field: "numero_frequenze", width: 95, hozAlign: "right",
         sorter: "number", sorterParams: {alignEmptyValues: "bottom"},
@@ -641,7 +656,7 @@ function initTable(data) {
           return v ? '<span style="color:#1a8c1a;font-weight:700">✓</span>' : "";
         },
         headerTooltip: "Indica se la misura è in vigore da più di cinque anni (proxy di stratificazione storica)"},
-      {title: "Pag.",        field: "page", width: 55, hozAlign: "right",
+      {title: "Pag.",        field: "page", width: 42, minWidth: 38, hozAlign: "right",
         headerTooltip: () => `Pagina del PDF RSF ${currentYear} in cui la misura compare (link diretto)`,
         formatter: (cell) => {
           const v = cell.getValue();
@@ -831,6 +846,12 @@ function initTable(data) {
     else table.hideColumn(f);
   });
 
+  // CSV export of the current view (filters + sort applied, visible columns only).
+  document.getElementById("export-csv-btn").addEventListener("click", () => {
+    const name = `spesefiscali_${currentYear}.csv`;
+    table.download("csv", name, {bom: true}, "active");
+  });
+
   const search = document.getElementById("search");
   search.addEventListener("input", applyFilters);
 
@@ -877,8 +898,10 @@ document.addEventListener("keydown", (e) => {
 </script>
 
 <div class="footer">
-  Fonte: <a href="https://www.mef.gov.it/export/sites/MEF/documenti-pubblicazioni/rapporti-relazioni/documenti/RSF-2024.pdf" target="_blank">MEF — Rapporto annuale sulle spese fiscali 2024</a>.
-  Codice e dati su <a href="https://github.com/gfrt0/spesefiscali" target="_blank">GitHub</a>, licenza MIT (codice) e CC BY 4.0 (dati derivati).
+  Cerca, filtra e ordina le <span id="sub-count">575</span> misure catalogate nella Tavola 1 del
+  <a id="sub-rsf-link" href="#" target="_blank">Rapporto annuale sulle spese fiscali</a>.
+  Codice e dati su <a href="https://github.com/gfrt0/spesefiscali" target="_blank">GitHub</a>,
+  licenza MIT (codice) e CC BY 4.0 (dati derivati).
 </div>
 </body>
 </html>

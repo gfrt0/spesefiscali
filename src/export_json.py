@@ -9,18 +9,25 @@ from pathlib import Path
 from normattiva import annotate
 from tributi import normalize as normalize_tributo
 from governi import lookup as lookup_governo
+from vigenza import normalize as normalize_vigenza
 
 ROOT = Path(__file__).resolve().parent.parent
 DB = ROOT / "db" / "spesefiscali.db"
 WEB = ROOT / "web"
-CLEAN_CSV = ROOT / "data" / "processed" / "descrizioni_clean.csv"
+PROCESSED = ROOT / "data" / "processed"
 
 
-def load_cleaned_descrizioni() -> dict[int, str]:
-    if not CLEAN_CSV.exists():
-        return {}
-    with CLEAN_CSV.open(encoding="utf-8") as f:
-        return {int(r["n"]): r["descrizione_clean"] for r in csv.DictReader(f)}
+def load_cleaned_descrizioni() -> dict[int, dict[int, str]]:
+    """Return {year: {n: descrizione_clean}} for every descrizioni_clean_{year}.csv present."""
+    out: dict[int, dict[int, str]] = {}
+    for p in sorted(PROCESSED.glob("descrizioni_clean_*.csv")):
+        try:
+            year = int(p.stem.split("_")[-1])
+        except ValueError:
+            continue
+        with p.open(encoding="utf-8") as f:
+            out[year] = {int(r["n"]): r["descrizione_clean"] for r in csv.DictReader(f)}
+    return out
 
 COLS_FOR_UI = [
     "n", "measure_uid", "missione", "norma", "descrizione", "tributo",
@@ -34,7 +41,7 @@ COLS_FOR_UI = [
 ]
 
 
-def export_year(con, year: int, cleaned: dict[int, str]) -> tuple[int, int]:
+def export_year(con, year: int, cleaned: dict[int, dict[int, str]]) -> tuple[int, int]:
     """Write web/measures_{year}.json and return (n_rows, n_resolved_urls)."""
     sql = (
         f"SELECT {', '.join(COLS_FOR_UI)} FROM measures "
@@ -47,14 +54,15 @@ def export_year(con, year: int, cleaned: dict[int, str]) -> tuple[int, int]:
         d["rsf_year"] = year
         d.update(annotate(d["norma"] or ""))
         d.update(normalize_tributo(d["tributo"] or ""))
+        d.update(normalize_vigenza(d.get("termine_vigenza") or ""))
         d.update(lookup_governo(d.get("norma_data")))
         u = lookup_governo(d.get("norma_ultimo_data"))
         d["governo_ultimo"]    = u["governo"]
         d["coalizione_ultima"] = u["coalizione"]
-        # Gemini cleanup currently only covers 2024.
-        if year == 2024 and d["n"] in cleaned:
+        year_clean = cleaned.get(year, {})
+        if d["n"] in year_clean:
             d["descrizione_raw"] = d["descrizione"]
-            d["descrizione"] = cleaned[d["n"]]
+            d["descrizione"] = year_clean[d["n"]]
         if d["norma_url"]:
             resolved += 1
         rows.append(d)
@@ -105,7 +113,7 @@ def main():
         "years": years,
         "default": latest,
         "rows_by_year": {y: n for y, n, *_ in summary},
-        "cleaned_descrizioni_years": [2024] if cleaned else [],
+        "cleaned_descrizioni_years": sorted(cleaned.keys()),
     }, ensure_ascii=False), encoding="utf-8")
     print(f"  years.json -> {years}")
 

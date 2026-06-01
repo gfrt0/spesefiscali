@@ -38,9 +38,13 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC_CSV    = ROOT / "data" / "processed" / "measures_2024.csv"
-OUT_CSV    = ROOT / "data" / "processed" / "descrizioni_clean.csv"
-REVIEW_CSV = ROOT / "data" / "processed" / "descrizioni_review.csv"
+PROCESSED = ROOT / "data" / "processed"
+
+def src_csv(year: int) -> Path:    return PROCESSED / f"measures_{year}.csv"
+def out_csv(year: int) -> Path:    return PROCESSED / f"descrizioni_clean_{year}.csv"
+def review_csv(year: int) -> Path: return PROCESSED / f"descrizioni_review_{year}.csv"
+
+ALL_YEARS = list(range(2016, 2025))
 
 MODEL = "gemini-2.5-flash"
 
@@ -149,46 +153,42 @@ def load_cache(path: Path) -> dict[int, str]:
         return {int(r["n"]): r["descrizione_clean"] for r in csv.DictReader(f)}
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--workers", type=int, default=8)
-    ap.add_argument("--limit", type=int, default=None, help="cap rows for a test run")
-    ap.add_argument("--force", action="store_true", help="ignore cache")
-    ap.add_argument("--retry-rejects", action="store_true",
-                    help="reprocess only rows present in descrizioni_review.csv")
-    args = ap.parse_args(argv)
+def run_year(client, year: int, args) -> None:
+    src, out, rev = src_csv(year), out_csv(year), review_csv(year)
+    if not src.exists():
+        print(f"[{year}] skip: {src.name} not found")
+        return
 
     rows = []
-    with SRC_CSV.open(encoding="utf-8") as f:
+    with src.open(encoding="utf-8") as f:
         for r in csv.DictReader(f):
             rows.append((int(r["n"]), r["descrizione"]))
     if args.limit:
         rows = rows[: args.limit]
 
-    cache = {} if args.force else load_cache(OUT_CSV)
-    if args.retry_rejects and REVIEW_CSV.exists():
-        with REVIEW_CSV.open(encoding="utf-8") as f:
+    cache = {} if args.force else load_cache(out)
+    if args.retry_rejects and rev.exists():
+        with rev.open(encoding="utf-8") as f:
             retry_ns = {int(r["n"]) for r in csv.DictReader(f)}
         for n in retry_ns:
             cache.pop(n, None)
-        print(f"--retry-rejects: re-processing {len(retry_ns)} previously rejected rows")
+        print(f"[{year}] --retry-rejects: re-processing {len(retry_ns)} previously rejected rows")
     todo = [(n, t) for n, t in rows if n not in cache]
-    print(f"{len(rows)} total | {len(cache)} cached | {len(todo)} to process")
+    print(f"[{year}] {len(rows)} total | {len(cache)} cached | {len(todo)} to process")
+    if not todo and not args.force:
+        return
 
-    client = make_client()
     results: list[Result] = []
     started = time.time()
-
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futs = {ex.submit(clean_one, client, n, t): n for n, t in todo}
         for i, fut in enumerate(as_completed(futs), 1):
             r = fut.result()
             results.append(r)
-            if i % 25 == 0 or i == len(futs):
+            if i % 50 == 0 or i == len(futs):
                 rate = i / max(time.time() - started, 1e-6)
-                print(f"  {i}/{len(futs)} ({rate:.1f}/s)")
+                print(f"  [{year}] {i}/{len(futs)} ({rate:.1f}/s)")
 
-    # merge cache + new ok/retry-ok; rejects fall back to original
     cleaned_map = dict(cache)
     rejects = []
     for r in results:
@@ -199,15 +199,14 @@ def main(argv=None):
             if r.status == "reject":
                 rejects.append(r)
 
-    OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    with OUT_CSV.open("w", newline="", encoding="utf-8") as f:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["n", "descrizione_clean"])
         for n in sorted(cleaned_map):
             w.writerow([n, cleaned_map[n]])
 
-    # Always rewrite review CSV so stale rejects don't accumulate across runs.
-    with REVIEW_CSV.open("w", newline="", encoding="utf-8") as f:
+    with rev.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["n", "note", "orig", "model_output"])
         for r in rejects:
@@ -215,10 +214,25 @@ def main(argv=None):
 
     from collections import Counter
     c = Counter(r.status for r in results)
-    print(f"\nstatus: {dict(c)}")
-    print(f"cleaned rows total: {len(cleaned_map)}")
-    if rejects:
-        print(f"rejects logged -> {REVIEW_CSV}")
+    print(f"[{year}] status: {dict(c)} | cleaned rows total: {len(cleaned_map)}"
+          + (f" | rejects -> {rev.name}" if rejects else ""))
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--limit", type=int, default=None, help="cap rows for a test run")
+    ap.add_argument("--force", action="store_true", help="ignore cache")
+    ap.add_argument("--retry-rejects", action="store_true",
+                    help="reprocess only rows present in the year's review CSV")
+    ap.add_argument("--year", type=int, action="append",
+                    help="restrict to one year (repeatable); default = all RSF years")
+    args = ap.parse_args(argv)
+
+    years = args.year or ALL_YEARS
+    client = make_client()
+    for y in years:
+        run_year(client, y, args)
 
 
 if __name__ == "__main__":

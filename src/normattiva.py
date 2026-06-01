@@ -242,18 +242,80 @@ def parse_norma(s: str) -> Parsed:
 
 
 def parse_all(s: str) -> list[Parsed]:
-    """Return every full citation found in `s` (ignores TU references)."""
+    """Return every citation found in `s` -- full-date AND abbreviated forms.
+
+    Scans all five citation patterns (CITE_RE, CITE_NUM_FIRST,
+    CITE_DATE_FIRST_NUMDATE, CITE_NUM_FIRST_NUMDATE, CITE_SHORT, CITE_DEL),
+    builds a Parsed for each match, and dedupes by (tipo, numero, year) so
+    that the same act doesn't appear twice when full and short forms
+    coexist. TU references (TUIR/TUA/...) are intentionally excluded:
+    they're aliases for an istitutiva that is normally cited explicitly
+    elsewhere in the norma string.
+    """
+    if not s:
+        return []
     out: list[Parsed] = []
-    for m in CITE_RE.finditer(s or ""):
-        tipo = _norm_tipo(m.group("tipo"))
-        mese = MESI[m.group("mese").lower()]
-        giorno = m.group("giorno").zfill(2)
-        anno = m.group("anno")
-        out.append(Parsed(
-            tipo=tipo, data=f"{anno}-{mese}-{giorno}",
-            numero=m.group("num"), source="cite",
-        ))
-    return out
+    spans: list[tuple[int, int]] = []  # claimed character spans
+
+    def claimed(a: int, b: int) -> bool:
+        return any(not (b <= x or a >= y) for (x, y) in spans)
+
+    # 1. Full-date patterns (textual month, num-first textual, numeric-date variants)
+    for rx, fmt in (
+        (CITE_RE,                  "tipo-date-num"),
+        (CITE_NUM_FIRST,           "tipo-num-date"),
+        (CITE_DATE_FIRST_NUMDATE,  "tipo-date-num-numeric"),
+        (CITE_NUM_FIRST_NUMDATE,   "tipo-num-date-numeric"),
+    ):
+        for m in rx.finditer(s):
+            if claimed(m.start(), m.end()):
+                continue
+            spans.append((m.start(), m.end()))
+            tipo = _norm_tipo(m.group("tipo"))
+            mese_raw = m.group("mese")
+            mese = mese_raw.zfill(2) if mese_raw.isdigit() else MESI[mese_raw.lower()]
+            giorno = m.group("giorno").zfill(2)
+            anno = m.group("anno")
+            out.append(Parsed(
+                tipo=tipo, data=f"{anno}-{mese}-{giorno}",
+                numero=m.group("num"), source="cite",
+            ))
+
+    # 2. Year-only forms (abbreviated). Skip spans already claimed by a full-date match.
+    for rx in (CITE_SHORT, CITE_DEL):
+        for m in rx.finditer(s):
+            if claimed(m.start(), m.end()):
+                continue
+            spans.append((m.start(), m.end()))
+            tipo = _norm_tipo(m.group("tipo"))
+            anno = _norm_anno(m.group("yy"))
+            out.append(Parsed(
+                tipo=tipo, data=anno, numero=m.group("num"), source="cite-short",
+            ))
+
+    # 3. Upgrade year-only dates with the cached Gazzetta publication date.
+    cache = _load_date_cache()
+    upgraded: list[Parsed] = []
+    for c in out:
+        if c.tipo and c.numero and c.data and len(c.data) == 4:
+            base = f"urn:nir:stato:{c.tipo}:{c.data};{c.numero}"
+            real = cache.get(base)
+            if real:
+                c = Parsed(tipo=c.tipo, data=real, numero=c.numero,
+                           articolo=c.articolo, comma=c.comma, source=c.source)
+        upgraded.append(c)
+
+    # 4. Dedupe by (tipo, numero, year) -- prefer the entry with the most precise date.
+    by_key: dict[tuple, Parsed] = {}
+    for c in upgraded:
+        if not (c.tipo and c.numero and c.data):
+            continue
+        year = c.data[:4]
+        key = (c.tipo, c.numero, year)
+        prev = by_key.get(key)
+        if prev is None or (len(c.data) > len(prev.data)):
+            by_key[key] = c
+    return list(by_key.values())
 
 
 def fallback_url(s: str) -> str | None:
@@ -311,13 +373,11 @@ def annotate(norma: str) -> dict:
         if real:
             p = Parsed(tipo=p.tipo, data=real, numero=p.numero,
                        articolo=p.articolo, comma=p.comma, source=p.source)
-    all_cites = parse_all(norma)
-    # Deduplicate (same date+numero) and pick the most recent.
-    seen = set(); uniq = []
-    for c in all_cites:
-        key = (c.data, c.numero, c.tipo)
-        if key in seen: continue
-        seen.add(key); uniq.append(c)
+    uniq = parse_all(norma)  # already deduped + year-only upgraded
+    # Pick the most recent. String compare on YYYY[-MM-DD] works because
+    # year-only entries collate before the same-year full-date variant (which
+    # we've already preferred during dedup), and across years the leading
+    # digits dominate.
     ultimo = max(uniq, key=lambda c: c.data) if uniq else None
     return {
         "norma_tipo": p.tipo,
